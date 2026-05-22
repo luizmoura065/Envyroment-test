@@ -443,8 +443,8 @@ function WeeklyView({navDate,byDate,selected,onSelect,t}){
                 <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:4}}>
                   {[
                     {l:"Total",   v:gpd.stats?.totalMetas,      c:t.txt},
-                    {l:"C Real.", v:gpd.stats?.comRealizado,    c:t.blue},
-                    {l:"S Real.", v:gpd.stats?.semRealizado,    c:t.txtSec},
+                    {l:"C Real", v:gpd.stats?.comRealizado,    c:t.blue},
+                    {l:"S Real", v:gpd.stats?.semRealizado,    c:t.txtSec},
                     {l:"Vermelho",v:gpd.stats?.emVermelho,      c:"#ef4444"},
                     {l:"Amarelo", v:gpd.stats?.emAmarelo,       c:"#f59e0b"},
                     {l:"Verde",   v:gpd.stats?.emVerde,         c:"#22c55e"},
