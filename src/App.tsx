@@ -14,7 +14,7 @@ function useXLSX() {
 }
 
 /* ─── Google Drive upload ───────────────── */
-const DRIVE_FOLDER       = "1QxqiYTz0T3Ynky5ff48HTtKPV5hoWyMh";
+const DRIVE_FOLDER       = "1xbxhkgi_8AhcelI2cGJVnJOWDTAR9fkw";
 const DEFAULT_FIREBASE   = "https://gpd-archive-default-rtdb.firebaseio.com";
 const DEFAULT_CLIENT_ID  = "926347832107-9u08816ppn9sgkmueae0i7mgbcbuuv5i.apps.googleusercontent.com";
 // drive scope completo — garante acesso à pasta compartilhada
