@@ -14,7 +14,7 @@ function useXLSX() {
 }
 
 /* ─── Google Drive upload ───────────────── */
-const DRIVE_FOLDER       = "1xbxhkgi_8AhcelI2cGJVnJOWDTAR9fkw";
+const DRIVE_FOLDER       = "1QxqiYTz0T3Ynky5ff48HTtKPV5hoWyMh";
 const DEFAULT_FIREBASE   = "https://gpd-archive-default-rtdb.firebaseio.com";
 const DEFAULT_CLIENT_ID  = "926347832107-9u08816ppn9sgkmueae0i7mgbcbuuv5i.apps.googleusercontent.com";
 // drive scope completo — garante acesso à pasta compartilhada
@@ -70,8 +70,11 @@ async function fetchWithTimeout(url, opts, ms = 30000) {
   }
 }
 
-async function uploadFileToDrive(token, file) {
-  const meta = JSON.stringify({ name: file.name, parents: [DRIVE_FOLDER] });
+async function uploadFileToDrive(token, file, gpdDate) {
+  // Renomeia para "GPD 2026-05-21.xlsx" para fácil localização
+  const ext      = file.name.split(".").pop();
+  const safeName = gpdDate ? `GPD ${gpdDate}.${ext}` : file.name;
+  const meta     = JSON.stringify({ name: safeName, parents: [DRIVE_FOLDER] });
   const form = new FormData();
   form.append("metadata", new Blob([meta], { type: "application/json" }));
   form.append("file", file);
@@ -440,8 +443,8 @@ function WeeklyView({navDate,byDate,selected,onSelect,t}){
                 <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:4}}>
                   {[
                     {l:"Total",   v:gpd.stats?.totalMetas,      c:t.txt},
-                    {l:"C/ Real.",v:gpd.stats?.comRealizado,    c:t.blue},
-                    {l:"S/ Real.",v:gpd.stats?.semRealizado,    c:t.txtSec},
+                    {l:"C Real.", v:gpd.stats?.comRealizado,    c:t.blue},
+                    {l:"S Real.", v:gpd.stats?.semRealizado,    c:t.txtSec},
                     {l:"Vermelho",v:gpd.stats?.emVermelho,      c:"#ef4444"},
                     {l:"Amarelo", v:gpd.stats?.emAmarelo,       c:"#f59e0b"},
                     {l:"Verde",   v:gpd.stats?.emVerde,         c:"#22c55e"},
@@ -584,8 +587,8 @@ function GPDArchiveInner(){
           setSelected(parsed.calendarDate);
           setUploading(false);
           // Upload do arquivo original para o Google Drive (em background)
-          // Sempre tenta o upload para o Drive (uploadToGDrive verifica internamente)
-          uploadToGDrive(file);
+          // Upload para o Drive com nome "GPD YYYY-MM-DD.xlsx"
+          uploadToGDrive(file, parsed.calendarDate);
         } catch(err){
           console.error(err); setUploading(false); setUploadErr("Erro: "+err?.message);
         }
@@ -595,7 +598,7 @@ function GPDArchiveInner(){
   },[saveToFirebase]);
 
   /* ── Google Drive upload (background) ── */
-  const uploadToGDrive = useCallback(async (file) => {
+  const uploadToGDrive = useCallback(async (file, fileDate) => {
     const cid = clientIdRef.current;
     if(!cid) return;
     try {
@@ -611,7 +614,7 @@ function GPDArchiveInner(){
       setDriveStatus("uploading");
       let res;
       try {
-        res = await uploadFileToDrive(token, file);
+        res = await uploadFileToDrive(token, file, fileDate);
       } catch(uploadErr) {
         // Se 401: token expirado → pede novo e tenta de novo
         if(String(uploadErr.message).includes("401")) {
@@ -620,7 +623,7 @@ function GPDArchiveInner(){
           token = await getGoogleToken(cid);
           gTokenRef.current = token; setGToken(token);
           setDriveStatus("uploading");
-          res = await uploadFileToDrive(token, file);
+          res = await uploadFileToDrive(token, file, fileDate);
         } else { throw uploadErr; }
       }
       console.log("Drive upload OK:", res?.id);
