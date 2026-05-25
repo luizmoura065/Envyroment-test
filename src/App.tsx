@@ -384,10 +384,26 @@ function AreaTable({areas,t}){
   const [abaAtiva, setAbaAtiva] = useState(0);
   if(!areas?.length) return null;
 
-  const hasClass  = areas.some(a=>a.isTopLevel!==undefined);
-  const topLevel  = hasClass ? areas.filter(a=>a.isTopLevel!==false) : areas;
-  const operacoes = areas.filter(a=>!a.isTopLevel && a.parentDir?.includes("OPERAÇÕES"));
-  const infra     = areas.filter(a=>!a.isTopLevel && a.parentDir?.includes("INFRAESTRUTURA"));
+  // Classificação por nome — funciona com qualquer dado (sem precisar reupload)
+  const TOP_PATTERN  = /^(DIRETORIA|CEO|GE SGI|GERENTE EXECUTIVA|JURÍDICO)/i;
+  const OPS_PATTERN  = /TIANGUÁ|IBIAPABA|TIGRE|RENTAL|OPERAÇÕES/i;
+  const INFRA_PATTERN= /NORONHA|UFV|ARCO|GRANJEIRO|CRATO|PARAÍSO|PARAISO|INFRA/i;
+
+  const classify = a => {
+    // Usa parentDir do parser se disponível; caso contrário usa nome
+    if(a.parentDir) {
+      if(a.parentDir.includes("OPERAÇÕES"))      return "ops";
+      if(a.parentDir.includes("INFRAESTRUTURA")) return "infra";
+    }
+    if(TOP_PATTERN.test(a.nome))   return "top";
+    if(OPS_PATTERN.test(a.nome))   return "ops";
+    if(INFRA_PATTERN.test(a.nome)) return "infra";
+    return "top"; // default: mantém em Por Diretoria
+  };
+
+  const topLevel  = areas.filter(a => classify(a)==="top");
+  const operacoes = areas.filter(a => classify(a)==="ops");
+  const infra     = areas.filter(a => classify(a)==="infra");
 
   const abas = [
     {label:"Por Diretoria",     count:topLevel.length,  color:t.accent,  rows:topLevel,  shortName:true},
@@ -395,13 +411,22 @@ function AreaTable({areas,t}){
     {label:"D. Infraestrutura", count:infra.length,     color:"#60a5fa", rows:infra,     shortName:false},
   ].filter(a=>a.count>0);
 
+  if(abas.length<=1 && topLevel.length===areas.length){
+    // Sem dados suficientes para separar — mostra tudo em uma aba
+    return(
+      <div style={{marginTop:8}}>
+        <div style={{fontSize:10,color:t.txtMuted,letterSpacing:"0.1em",marginBottom:10}}>RESULTADO POR DIRETORIA</div>
+        <AreaTableContent rows={areas} t={t} shortName={true}/>
+      </div>
+    );
+  }
+
   const idx = Math.min(abaAtiva, abas.length-1);
   const aba = abas[idx];
   if(!aba) return null;
 
   return(
     <div style={{marginTop:8}}>
-      {/* Abas */}
       <div style={{display:"flex",borderBottom:`1px solid ${t.border}`,marginBottom:0}}>
         {abas.map((a,i)=>{
           const active=i===idx;
@@ -409,7 +434,7 @@ function AreaTable({areas,t}){
             <button key={i} onClick={()=>setAbaAtiva(i)} style={{
               background:"none",border:"none",cursor:"pointer",
               borderBottom:active?`2px solid ${a.color}`:"2px solid transparent",
-              padding:"10px 18px",fontSize:11,marginBottom:-1,
+              padding:"10px 20px",fontSize:11,marginBottom:-1,
               fontFamily:"'IBM Plex Mono',monospace",letterSpacing:"0.04em",
               color:active?a.color:t.txtMuted,fontWeight:active?700:400,
               transition:"all 0.15s",whiteSpace:"nowrap",
@@ -418,14 +443,13 @@ function AreaTable({areas,t}){
               <span style={{marginLeft:6,fontSize:9,
                 background:active?`${a.color}22`:"transparent",
                 color:active?a.color:t.txtMuted,
-                borderRadius:4,padding:"1px 6px"}}>
+                borderRadius:4,padding:"1px 6px",transition:"all 0.15s"}}>
                 {a.count}
               </span>
             </button>
           );
         })}
       </div>
-      {/* Conteúdo da aba ativa */}
       <div style={{paddingTop:14}}>
         <AreaTableContent rows={aba.rows} t={t} shortName={aba.shortName}/>
       </div>
