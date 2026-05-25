@@ -207,13 +207,40 @@ function parseGPD(wb, filename) {
           verde:row[4]||0,amarelo:row[5]||0,vermelho:row[6]||0,critico:row[7]||0,semReal:row[8]||0});
       }
     }
+    // Parse individual metas from "TODAS AS METAS" sheet
+    const metas = [];
+    const allSheet = wb.SheetNames.find(n => n.includes("TODAS"));
+    if (allSheet) {
+      const allRows = window.XLSX.utils.sheet_to_json(wb.Sheets[allSheet], {header:1, defval:null});
+      // Header na linha 4, dados a partir da linha 5
+      for (let i = 5; i < allRows.length; i++) {
+        const r = allRows[i];
+        if (!r || !r[1] || typeof r[1] !== "string") continue;
+        const farol = String(r[8] || "").trim();
+        if (!farol) continue;
+        metas.push({
+          codigo:      String(r[1]  || "").trim(),
+          diretoria:   String(r[2]  || "").trim(),
+          objetivo:    String(r[3]  || "").trim(),
+          responsavel: String(r[4]  || "").trim(),
+          previsto:    r[5] != null ? String(r[5]).trim() : "—",
+          realizado:   r[6] != null ? String(r[6]).trim() : "—",
+          desvio:      r[7] != null ? String(r[7]).trim() : "—",
+          farol,
+          comCM:       String(r[11] || "").includes("Sim"),
+          area:        String(r[12] || r[2] || "").trim(),
+          tipo:        String(r[13] || "").trim(),
+        });
+      }
+    }
+
     return {
       id:`${Date.now()}-${Math.random().toString(36).slice(2,7)}`,
       filename,referencia,geradoEm,
       calendarDate:calendarDate||TODAY,
       uploadedAt:new Date().toISOString(),
       stats:{totalMetas,comRealizado,semRealizado,emVermelho,emAmarelo,emVerde,vermelhoSemCM,amareloSemCM},
-      areas,
+      areas, metas,
     };
   } catch(e){console.error("parseGPD:",e);return null;}
 }
@@ -250,10 +277,19 @@ class ErrorBoundary extends Component {
 }
 
 /* ─── StatCard ───────────────────────────── */
-function StatCard({label,value,color,sub,t}){
+function StatCard({label,value,color,sub,t,onClick,filterKey}){
+  const clickable = !!onClick;
   return(
-    <div style={{background:t.bgStat,border:`1px solid ${t.border}`,borderRadius:10,padding:"12px 16px"}}>
-      <div style={{fontSize:9,letterSpacing:"0.1em",color:t.txtMuted,marginBottom:8}}>{label}</div>
+    <div onClick={onClick}
+      style={{background:t.bgStat,border:`1px solid ${clickable?"transparent":t.border}`,borderRadius:10,padding:"12px 16px",
+        cursor:clickable?"pointer":"default",transition:"all 0.15s",position:"relative",
+        outline:clickable?`1px solid ${color}00`:undefined}}
+      onMouseEnter={e=>{ if(clickable){ e.currentTarget.style.border=`1px solid ${color}66`; e.currentTarget.style.background=`${color}0d`; e.currentTarget.style.transform="translateY(-1px)"; }}}
+      onMouseLeave={e=>{ if(clickable){ e.currentTarget.style.border=`1px solid transparent`; e.currentTarget.style.background=t.bgStat; e.currentTarget.style.transform="translateY(0)"; }}}>
+      <div style={{fontSize:9,letterSpacing:"0.1em",color:t.txtMuted,marginBottom:8,display:"flex",alignItems:"center",gap:4}}>
+        {label}
+        {clickable&&<span style={{fontSize:8,color:color,opacity:0.7}}>↗</span>}
+      </div>
       <div style={{fontSize:28,fontWeight:700,color,lineHeight:1}}>{value??"—"}</div>
       {sub&&<div style={{fontSize:9,color:t.txtSec,marginTop:6}}>{sub}</div>}
     </div>
@@ -314,8 +350,120 @@ function AreaTable({areas,t}){
   );
 }
 
+/* ─── MetasModal ─────────────────────────── */
+const FILTER_CONFIG = {
+  semRealizado: { label:"Sem Realizado",    color:"#94a3b8", fn: m => m.farol==="Sem dado" || m.realizado==="—" },
+  emVermelho:   { label:"Em Vermelho",      color:"#ef4444", fn: m => m.farol==="Vermelho" },
+  emAmarelo:    { label:"Em Amarelo",       color:"#f59e0b", fn: m => m.farol==="Amarelo"  },
+  emVerde:      { label:"Em Verde",         color:"#22c55e", fn: m => m.farol==="Verde"    },
+  vermelhoSemCM:{ label:"Vermelho s/ CM",   color:"#ef4444", fn: m => m.farol==="Vermelho" && !m.comCM },
+  amareloSemCM: { label:"Amarelo s/ CM",    color:"#f59e0b", fn: m => m.farol==="Amarelo"  && !m.comCM },
+  total:        { label:"Todas as Metas",   color:"#f1f5f9", fn: m => true },
+  comRealizado: { label:"Com Realizado",    color:"#60a5fa", fn: m => m.farol!=="Sem dado" && m.realizado!=="—" },
+};
+
+const FAROL_COLORS = { "Verde":"#22c55e", "Amarelo":"#f59e0b", "Vermelho":"#ef4444", "Sem dado":"#64748b" };
+
+function MetasModal({gpd, filterKey, onClose, t}) {
+  const [search, setSearch] = useState("");
+  const [sortBy, setSortBy] = useState("diretoria");
+  if (!gpd || !filterKey) return null;
+
+  const cfg   = FILTER_CONFIG[filterKey];
+  const metas = (gpd.metas || []).filter(cfg.fn);
+  const q     = search.toLowerCase();
+  const shown = metas
+    .filter(m => !q || m.objetivo.toLowerCase().includes(q) || m.diretoria.toLowerCase().includes(q) || m.responsavel.toLowerCase().includes(q) || m.codigo.toLowerCase().includes(q))
+    .sort((a,b) => {
+      if(sortBy==="diretoria") return a.diretoria.localeCompare(b.diretoria);
+      if(sortBy==="farol")     return a.farol.localeCompare(b.farol);
+      if(sortBy==="desvio") {
+        const pa=parseFloat(a.desvio)||0, pb=parseFloat(b.desvio)||0;
+        return pa-pb;
+      }
+      return 0;
+    });
+
+  return (
+    <div style={{position:"fixed",inset:0,zIndex:2000,display:"flex",alignItems:"center",justifyContent:"center",padding:20,background:"rgba(0,0,0,0.6)"}}>
+      <div style={{width:"100%",maxWidth:900,maxHeight:"88vh",display:"flex",flexDirection:"column",background:t.bgHdr,border:`1px solid ${cfg.color}44`,borderRadius:16,overflow:"hidden",boxShadow:"0 20px 60px rgba(0,0,0,0.6)"}}>
+        {/* Header */}
+        <div style={{padding:"18px 24px",borderBottom:`1px solid ${t.border}`,display:"flex",alignItems:"center",gap:14,flexShrink:0}}>
+          <div style={{width:10,height:10,borderRadius:"50%",background:cfg.color,flexShrink:0}}/>
+          <div>
+            <div style={{fontFamily:"'Bebas Neue',sans-serif",fontSize:20,letterSpacing:"0.1em",color:cfg.color}}>{cfg.label}</div>
+            <div style={{fontSize:10,color:t.txtSec,marginTop:2}}>GPD {gpd.referencia} · {shown.length} de {metas.length} metas{q?" (filtrado)":""}</div>
+          </div>
+          <div style={{flex:1}}/>
+          {/* Search */}
+          <input value={search} onChange={e=>setSearch(e.target.value)}
+            placeholder="Buscar meta, responsável, código..."
+            style={{background:t.bg,color:t.txt,border:`1px solid ${t.border}`,borderRadius:8,padding:"7px 12px",fontSize:11,fontFamily:"'IBM Plex Mono',monospace",outline:"none",width:260}}/>
+          {/* Sort */}
+          <select value={sortBy} onChange={e=>setSortBy(e.target.value)}
+            style={{background:t.bg,color:t.txt,border:`1px solid ${t.border}`,borderRadius:8,padding:"7px 10px",fontSize:11,fontFamily:"'IBM Plex Mono',monospace",outline:"none",cursor:"pointer"}}>
+            <option value="diretoria">Ordenar: Diretoria</option>
+            <option value="farol">Ordenar: Farol</option>
+            <option value="desvio">Ordenar: % Desvio</option>
+          </select>
+          <button onClick={onClose} style={{background:"none",border:"none",color:t.txtMuted,fontSize:24,cursor:"pointer",lineHeight:1,padding:"0 4px"}}>✕</button>
+        </div>
+
+        {/* Table */}
+        <div style={{overflowY:"auto",flex:1}}>
+          {shown.length===0 ? (
+            <div style={{textAlign:"center",padding:60,color:t.txtMuted,fontSize:13}}>Nenhuma meta encontrada</div>
+          ) : (
+            <table style={{width:"100%",borderCollapse:"collapse",fontSize:11}}>
+              <thead style={{position:"sticky",top:0,background:t.bgHdr,zIndex:1}}>
+                <tr style={{borderBottom:`1px solid ${t.border}`}}>
+                  {["Código","Diretoria","Objetivo","Responsável","Previsto","Realizado","% Desvio","Farol"].map(h=>(
+                    <th key={h} style={{padding:"10px 12px",textAlign:"left",fontSize:9,color:t.txtMuted,letterSpacing:"0.08em",fontWeight:700,whiteSpace:"nowrap"}}>{h}</th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {shown.map((m,i)=>{
+                  const fc = FAROL_COLORS[m.farol] || t.txtMuted;
+                  const desvioNum = parseFloat(m.desvio);
+                  const desvioColor = isNaN(desvioNum) ? t.txtMuted : desvioNum<-20?"#ef4444":desvioNum<0?"#f59e0b":desvioNum>0?"#22c55e":t.txtSec;
+                  return(
+                    <tr key={i} style={{borderBottom:`1px solid ${t.border}`,transition:"background 0.1s"}}
+                      onMouseEnter={e=>e.currentTarget.style.background=t.bgAccLt}
+                      onMouseLeave={e=>e.currentTarget.style.background="transparent"}>
+                      <td style={{padding:"9px 12px",color:t.accent,fontWeight:700,whiteSpace:"nowrap",fontSize:10}}>{m.codigo}</td>
+                      <td style={{padding:"9px 12px",color:t.txtSec,maxWidth:160,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}} title={m.diretoria}>{m.diretoria.replace("DIRETORIA DE ","").replace("DIRETORIA ","")}</td>
+                      <td style={{padding:"9px 12px",color:t.txt,maxWidth:240,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}} title={m.objetivo}>{m.objetivo}</td>
+                      <td style={{padding:"9px 12px",color:t.txtSec,maxWidth:140,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}} title={m.responsavel}>{m.responsavel.split(" ").slice(0,2).join(" ")}</td>
+                      <td style={{padding:"9px 12px",textAlign:"right",color:t.txtSec,whiteSpace:"nowrap"}}>{m.previsto}</td>
+                      <td style={{padding:"9px 12px",textAlign:"right",color:t.txt,fontWeight:600,whiteSpace:"nowrap"}}>{m.realizado}</td>
+                      <td style={{padding:"9px 12px",textAlign:"right",color:desvioColor,fontWeight:700,whiteSpace:"nowrap"}}>{m.desvio}</td>
+                      <td style={{padding:"9px 12px",whiteSpace:"nowrap"}}>
+                        <span style={{background:`${fc}18`,color:fc,border:`1px solid ${fc}44`,borderRadius:6,padding:"2px 8px",fontSize:9,fontWeight:700}}>{m.farol}</span>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          )}
+        </div>
+
+        {/* Footer summary */}
+        <div style={{padding:"12px 24px",borderTop:`1px solid ${t.border}`,display:"flex",gap:20,fontSize:10,color:t.txtMuted,flexShrink:0}}>
+          {Object.entries(
+            shown.reduce((acc,m)=>{ acc[m.farol]=(acc[m.farol]||0)+1; return acc; }, {})
+          ).map(([f,n])=>(
+            <span key={f} style={{color:FAROL_COLORS[f]||t.txtMuted,fontWeight:600}}>{f}: {n}</span>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 /* ─── DetailPanel ────────────────────────── */
-function DetailPanel({gpd,onClose,onRemove,t}){
+function DetailPanel({gpd,onClose,onRemove,t,onStatClick}){
   if(!gpd) return null;
   return(
     <div style={{background:t.bgAccLt,border:`1px solid ${t.borderAcc}`,borderRadius:14,padding:26,marginTop:24}}>
@@ -327,14 +475,14 @@ function DetailPanel({gpd,onClose,onRemove,t}){
         <button onClick={onClose} style={{background:"none",border:"none",color:t.txtMuted,fontSize:22,cursor:"pointer",padding:"0 4px",lineHeight:1}}>✕</button>
       </div>
       <div style={{display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:10,marginBottom:22}}>
-        <StatCard t={t} label="TOTAL METAS" value={gpd.stats?.totalMetas} color={t.txt}/>
-        <StatCard t={t} label="COM REALIZADO" value={gpd.stats?.comRealizado} color={t.blue} sub={`${pct(gpd.stats?.comRealizado,gpd.stats?.totalMetas)}% atualizado`}/>
-        <StatCard t={t} label="SEM REALIZADO" value={gpd.stats?.semRealizado} color={t.txtSec}/>
-        <StatCard t={t} label="EM VERMELHO" value={gpd.stats?.emVermelho} color="#ef4444" sub={`${pct(gpd.stats?.emVermelho,gpd.stats?.totalMetas)}% do total`}/>
-        <StatCard t={t} label="EM AMARELO" value={gpd.stats?.emAmarelo} color="#f59e0b"/>
-        <StatCard t={t} label="EM VERDE" value={gpd.stats?.emVerde} color="#22c55e" sub={`${pct(gpd.stats?.emVerde,gpd.stats?.comRealizado)}% no alvo`}/>
-        <StatCard t={t} label="🚨 VERM. s/CM" value={gpd.stats?.vermelhoSemCM} color="#ef4444"/>
-        <StatCard t={t} label="⚡ AMAR. s/CM" value={gpd.stats?.amareloSemCM} color="#f59e0b"/>
+        <StatCard t={t} label="TOTAL METAS"   value={gpd.stats?.totalMetas}    color={t.txt}    onClick={gpd.metas?.length?()=>onStatClick("total"):null}/>
+        <StatCard t={t} label="COM REALIZADO" value={gpd.stats?.comRealizado}  color={t.blue}   onClick={gpd.metas?.length?()=>onStatClick("comRealizado"):null} sub={`${pct(gpd.stats?.comRealizado,gpd.stats?.totalMetas)}% atualizado`}/>
+        <StatCard t={t} label="SEM REALIZADO" value={gpd.stats?.semRealizado}  color={t.txtSec} onClick={gpd.metas?.length?()=>onStatClick("semRealizado"):null}/>
+        <StatCard t={t} label="EM VERMELHO"   value={gpd.stats?.emVermelho}    color="#ef4444"  onClick={gpd.metas?.length?()=>onStatClick("emVermelho"):null}   sub={`${pct(gpd.stats?.emVermelho,gpd.stats?.totalMetas)}% do total`}/>
+        <StatCard t={t} label="EM AMARELO"    value={gpd.stats?.emAmarelo}     color="#f59e0b"  onClick={gpd.metas?.length?()=>onStatClick("emAmarelo"):null}/>
+        <StatCard t={t} label="EM VERDE"      value={gpd.stats?.emVerde}       color="#22c55e"  onClick={gpd.metas?.length?()=>onStatClick("emVerde"):null}      sub={`${pct(gpd.stats?.emVerde,gpd.stats?.comRealizado)}% no alvo`}/>
+        <StatCard t={t} label="🚨 VERM. s/CM" value={gpd.stats?.vermelhoSemCM} color="#ef4444"  onClick={gpd.metas?.length?()=>onStatClick("vermelhoSemCM"):null}/>
+        <StatCard t={t} label="⚡ AMAR. s/CM" value={gpd.stats?.amareloSemCM}  color="#f59e0b"  onClick={gpd.metas?.length?()=>onStatClick("amareloSemCM"):null}/>
       </div>
       <FarolBar stats={gpd.stats} t={t}/>
       <AreaTable areas={gpd.areas} t={t}/>
@@ -523,6 +671,7 @@ function GPDArchiveInner(){
   const [selected, setSelected] = useState(null);
   const [dragging,    setDragging]    = useState(false);
   const [showConfig,  setShowConfig]  = useState(false);
+  const [metasFilter, setMetasFilter] = useState(null); // filterKey | null
   const [syncStatus,setSyncStatus]=useState("idle"); // idle | syncing | ok | err
   const [syncMsg,  setSyncMsg]  = useState("");
   const [uploading,  setUploading]   = useState(false);
@@ -861,7 +1010,9 @@ function GPDArchiveInner(){
 
             {selGpd&&<DetailPanel gpd={selGpd} t={t}
               onClose={()=>setSelected(null)}
+              onStatClick={key=>setMetasFilter(key)}
               onRemove={async()=>{const next=gpds.filter(g=>g.id!==selGpd.id);setGpds(next);await saveToFirebase(next);setSelected(null);}}/>}
+            {metasFilter&&selGpd&&<MetasModal gpd={selGpd} filterKey={metasFilter} onClose={()=>setMetasFilter(null)} t={t}/>}
           </main>
         </div>
       </div>
