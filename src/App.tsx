@@ -335,13 +335,48 @@ function FarolBar({stats,t}){
 /* ─── AreaTable (com abas) ───────────────── */
 const TH = ["Área","Total","% Atual.","🟢","🟡","🔴","🚨","⏳"];
 
-function AreaTableContent({rows,t,shortName}){
-  const sorted=[...rows].sort((a,b)=>b.pct-a.pct);
+function AreaTableContent({rows,t,shortName,pinnedNome}){
+  // pinnedNome: linha da diretoria que fica fixada no topo, resto em ordem decrescente de %
+  const pinned  = pinnedNome ? rows.filter(a=>a.nome===pinnedNome) : [];
+  const rest    = [...rows.filter(a=>a.nome!==pinnedNome)].sort((a,b)=>b.pct-a.pct);
+  const sorted  = [...pinned, ...rest];
+
   if(!sorted.length) return(
     <div style={{padding:"32px 0",textAlign:"center",fontSize:11,color:t.txtMuted}}>
-      Nenhum dado — faça novo upload para classificar as áreas.
+      Nenhum dado disponível.
     </div>
   );
+
+  const renderRow = (a,i,isPinned) => {
+    const pc=a.pct>=80?"#22c55e":a.pct>=50?"#f59e0b":"#ef4444";
+    const nm=shortName
+      ? a.nome.replace("DIRETORIA DE ","").replace("DIRETORIA ","").replace("GERENTE EXECUTIVA ","GE ")
+      : a.nome;
+    return(
+      <tr key={i} style={{
+        borderBottom:`1px solid ${t.border}`,
+        background:isPinned?`${t.accent}08`:"transparent",
+      }}>
+        <td style={{padding:"8px 10px",fontSize:10,maxWidth:240,overflow:"hidden",
+          textOverflow:"ellipsis",whiteSpace:"nowrap",
+          color:isPinned?t.txt:t.txtSec,
+          fontWeight:isPinned?700:400,
+          borderLeft:isPinned?`3px solid ${t.accent}`:"3px solid transparent",
+        }} title={a.nome}>
+          {isPinned&&<span style={{fontSize:8,color:t.accent,marginRight:5}}>▶</span>}
+          {nm}
+        </td>
+        <td style={{padding:"8px 10px",textAlign:"center",color:t.txt,fontWeight:700}}>{a.total}</td>
+        <td style={{padding:"8px 10px",textAlign:"center",color:pc,fontWeight:700}}>{a.pct}%</td>
+        <td style={{padding:"8px 10px",textAlign:"center",color:"#22c55e"}}>{a.verde}</td>
+        <td style={{padding:"8px 10px",textAlign:"center",color:"#f59e0b"}}>{a.amarelo}</td>
+        <td style={{padding:"8px 10px",textAlign:"center",color:"#ef4444"}}>{a.vermelho}</td>
+        <td style={{padding:"8px 10px",textAlign:"center",color:"#ef4444",fontWeight:700}}>{a.critico}</td>
+        <td style={{padding:"8px 10px",textAlign:"center",color:t.txtMuted}}>{a.semReal}</td>
+      </tr>
+    );
+  };
+
   return(
     <div style={{overflowX:"auto"}}>
       <table style={{width:"100%",borderCollapse:"collapse",fontSize:11}}>
@@ -356,24 +391,11 @@ function AreaTableContent({rows,t,shortName}){
           </tr>
         </thead>
         <tbody>
-          {sorted.map((a,i)=>{
-            const pc=a.pct>=80?"#22c55e":a.pct>=50?"#f59e0b":"#ef4444";
-            const nm=shortName
-              ? a.nome.replace("DIRETORIA DE ","").replace("DIRETORIA ","").replace("GERENTE EXECUTIVA ","GE ")
-              : a.nome;
-            return(
-              <tr key={i} style={{borderBottom:`1px solid ${t.border}`}}>
-                <td style={{padding:"8px 10px",color:t.txtSec,fontSize:10,maxWidth:240,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}} title={a.nome}>{nm}</td>
-                <td style={{padding:"8px 10px",textAlign:"center",color:t.txt,fontWeight:700}}>{a.total}</td>
-                <td style={{padding:"8px 10px",textAlign:"center",color:pc,fontWeight:700}}>{a.pct}%</td>
-                <td style={{padding:"8px 10px",textAlign:"center",color:"#22c55e"}}>{a.verde}</td>
-                <td style={{padding:"8px 10px",textAlign:"center",color:"#f59e0b"}}>{a.amarelo}</td>
-                <td style={{padding:"8px 10px",textAlign:"center",color:"#ef4444"}}>{a.vermelho}</td>
-                <td style={{padding:"8px 10px",textAlign:"center",color:"#ef4444",fontWeight:700}}>{a.critico}</td>
-                <td style={{padding:"8px 10px",textAlign:"center",color:t.txtMuted}}>{a.semReal}</td>
-              </tr>
-            );
-          })}
+          {pinned.map((a,i)=>renderRow(a,`p${i}`,true))}
+          {pinned.length>0&&rest.length>0&&(
+            <tr><td colSpan={8} style={{padding:"3px 10px",background:"transparent",borderBottom:`1px solid ${t.border}`}}/></tr>
+          )}
+          {rest.map((a,i)=>renderRow(a,i,false))}
         </tbody>
       </table>
     </div>
@@ -389,30 +411,38 @@ function AreaTable({areas,t}){
   const OPS_PATTERN  = /TIANGUÁ|IBIAPABA|TIGRE|RENTAL|OPERAÇÕES/i;
   const INFRA_PATTERN= /NORONHA|UFV|ARCO|GRANJEIRO|CRATO|PARAÍSO|PARAISO|INFRA/i;
 
-  const classify = a => {
-    // Usa parentDir do parser se disponível; caso contrário usa nome
-    if(a.parentDir) {
-      if(a.parentDir.includes("OPERAÇÕES"))      return "ops";
-      if(a.parentDir.includes("INFRAESTRUTURA")) return "infra";
-    }
-    if(TOP_PATTERN.test(a.nome))   return "top";
-    if(OPS_PATTERN.test(a.nome))   return "ops";
-    if(INFRA_PATTERN.test(a.nome)) return "infra";
-    return "top"; // default: mantém em Por Diretoria
+  // Detecta a linha da diretoria-mãe para cada sub-aba
+  const OPS_DIR_NAME  = areas.find(a=>/^DIRETORIA DE OPERAÇÕES$/i.test(a.nome))?.nome || null;
+  const INFRA_DIR_NAME= areas.find(a=>/^DIRETORIA DE INFRAESTRUTURA/i.test(a.nome))?.nome || null;
+
+  const isSubArea = a => {
+    // Sub-área = não começa com padrão de diretoria E tem parentDir diferente do próprio nome
+    if(a.parentDir && a.parentDir !== a.nome) return true;
+    if(TOP_PATTERN.test(a.nome)) return false;
+    if(OPS_PATTERN.test(a.nome) || INFRA_PATTERN.test(a.nome)) return true;
+    return false;
   };
 
-  const topLevel  = areas.filter(a => classify(a)==="top");
-  const operacoes = areas.filter(a => classify(a)==="ops");
-  const infra     = areas.filter(a => classify(a)==="infra");
+  const getParent = a => {
+    if(a.parentDir) return a.parentDir;
+    if(OPS_PATTERN.test(a.nome))   return "DIRETORIA DE OPERAÇÕES";
+    if(INFRA_PATTERN.test(a.nome)) return "DIRETORIA DE INFRAESTRUTURA E CONCESSÕES";
+    return null;
+  };
+
+  // Por Diretoria: TODAS as directorias (top-level) — inclui Operações e Infra
+  const topLevel  = areas.filter(a => !isSubArea(a));
+  // Sub-áreas separadas por parent
+  const operacoes = areas.filter(a => isSubArea(a) && getParent(a)?.includes("OPERAÇÕES"));
+  const infra     = areas.filter(a => isSubArea(a) && getParent(a)?.includes("INFRAESTRUTURA"));
 
   const abas = [
-    {label:"Por Diretoria",     count:topLevel.length,  color:t.accent,  rows:topLevel,  shortName:true},
-    {label:"D. Operações",      count:operacoes.length, color:"#f59e0b", rows:operacoes, shortName:false},
-    {label:"D. Infraestrutura", count:infra.length,     color:"#60a5fa", rows:infra,     shortName:false},
+    {label:"Por Diretoria",     count:topLevel.length,  color:t.accent,  rows:topLevel,  shortName:true,  pinned:null},
+    {label:"D. Operações",      count:operacoes.length, color:"#f59e0b", rows:operacoes, shortName:false, pinned:OPS_DIR_NAME},
+    {label:"D. Infraestrutura", count:infra.length,     color:"#60a5fa", rows:infra,     shortName:false, pinned:INFRA_DIR_NAME},
   ].filter(a=>a.count>0);
 
-  if(abas.length<=1 && topLevel.length===areas.length){
-    // Sem dados suficientes para separar — mostra tudo em uma aba
+  if(abas.length<=1){
     return(
       <div style={{marginTop:8}}>
         <div style={{fontSize:10,color:t.txtMuted,letterSpacing:"0.1em",marginBottom:10}}>RESULTADO POR DIRETORIA</div>
@@ -451,7 +481,7 @@ function AreaTable({areas,t}){
         })}
       </div>
       <div style={{paddingTop:14}}>
-        <AreaTableContent rows={aba.rows} t={t} shortName={aba.shortName}/>
+        <AreaTableContent rows={aba.rows} t={t} shortName={aba.shortName} pinnedNome={aba.pinned}/>
       </div>
     </div>
   );
