@@ -234,13 +234,32 @@ function parseGPD(wb, filename) {
       }
     }
 
+    // Build area→diretoria map from metas for sub-table classification
+    const areaToDir = {};
+    for (const m of metas) {
+      if (m.area && m.diretoria) areaToDir[m.area] = m.diretoria;
+    }
+
+    // Top-level diretoria names (area == diretoria in the map)
+    const isDiretoria = nome => {
+      const d = areaToDir[nome];
+      return !d || d === nome || /^DIRETORIA|^CEO|^GE SGI|^JURÍDICO|GERENTE EXECUTIVA/i.test(nome);
+    };
+
+    // Classify areas and attach parent diretoria
+    const areasClassified = areas.map(a => ({
+      ...a,
+      parentDir: areaToDir[a.nome] || null,
+      isTopLevel: isDiretoria(a.nome),
+    }));
+
     return {
       id:`${Date.now()}-${Math.random().toString(36).slice(2,7)}`,
       filename,referencia,geradoEm,
       calendarDate:calendarDate||TODAY,
       uploadedAt:new Date().toISOString(),
       stats:{totalMetas,comRealizado,semRealizado,emVermelho,emAmarelo,emVerde,vermelhoSemCM,amareloSemCM},
-      areas, metas,
+      areas:areasClassified, metas,
     };
   } catch(e){console.error("parseGPD:",e);return null;}
 }
@@ -314,38 +333,78 @@ function FarolBar({stats,t}){
 }
 
 /* ─── AreaTable ──────────────────────────── */
-function AreaTable({areas,t}){
-  if(!areas?.length) return null;
+function AreaRows({rows,t,shortName=true}){
+  const sorted=[...rows].sort((a,b)=>b.pct-a.pct);
   return(
-    <div>
-      <div style={{fontSize:10,color:t.txtMuted,letterSpacing:"0.1em",marginBottom:10}}>RESULTADO POR DIRETORIA</div>
+    <tbody>
+      {sorted.map((a,i)=>{
+        const pc=a.pct>=80?"#22c55e":a.pct>=50?"#f59e0b":"#ef4444";
+        const nm=shortName
+          ? a.nome.replace("DIRETORIA DE ","").replace("DIRETORIA ","").replace("GERENTE EXECUTIVA ","GE ")
+          : a.nome;
+        return(
+          <tr key={i} style={{borderBottom:`1px solid ${t.border}`}}>
+            <td style={{padding:"7px 10px",color:t.txtSec,fontSize:10,maxWidth:220,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}} title={a.nome}>{nm}</td>
+            <td style={{padding:"7px 10px",textAlign:"center",color:t.txt,fontWeight:700}}>{a.total}</td>
+            <td style={{padding:"7px 10px",textAlign:"center",color:pc,fontWeight:700}}>{a.pct}%</td>
+            <td style={{padding:"7px 10px",textAlign:"center",color:"#22c55e"}}>{a.verde}</td>
+            <td style={{padding:"7px 10px",textAlign:"center",color:"#f59e0b"}}>{a.amarelo}</td>
+            <td style={{padding:"7px 10px",textAlign:"center",color:"#ef4444"}}>{a.vermelho}</td>
+            <td style={{padding:"7px 10px",textAlign:"center",color:"#ef4444",fontWeight:700}}>{a.critico}</td>
+            <td style={{padding:"7px 10px",textAlign:"center",color:t.txtMuted}}>{a.semReal}</td>
+          </tr>
+        );
+      })}
+    </tbody>
+  );
+}
+
+const TABLE_HEADERS = ["Diretoria / Área","Total","% Atual.","🟢","🟡","🔴","🚨","⏳"];
+
+function AreaSubTable({title,rows,t,accent,shortName=true}){
+  if(!rows?.length) return null;
+  const color = accent||t.accent;
+  return(
+    <div style={{marginBottom:24}}>
+      <div style={{fontSize:10,color:color,letterSpacing:"0.1em",marginBottom:10,fontWeight:700,
+        display:"flex",alignItems:"center",gap:8}}>
+        <span style={{width:6,height:6,borderRadius:"50%",background:color,display:"inline-block",flexShrink:0}}/>
+        {title}
+        <span style={{fontSize:9,color:t.txtMuted,fontWeight:400}}>({rows.length} registros)</span>
+      </div>
       <div style={{overflowX:"auto"}}>
         <table style={{width:"100%",borderCollapse:"collapse",fontSize:11}}>
           <thead><tr style={{borderBottom:`1px solid ${t.border}`}}>
-            {["Diretoria","Total","% Atual.","🟢","🟡","🔴","🚨","⏳"].map(h=>(
-              <th key={h} style={{padding:"6px 10px",textAlign:h==="Diretoria"?"left":"center",fontSize:9,color:t.txtMuted,letterSpacing:"0.08em",fontWeight:600,whiteSpace:"nowrap"}}>{h}</th>
+            {TABLE_HEADERS.map(h=>(
+              <th key={h} style={{padding:"6px 10px",textAlign:h===TABLE_HEADERS[0]?"left":"center",fontSize:9,color:t.txtMuted,letterSpacing:"0.08em",fontWeight:600,whiteSpace:"nowrap"}}>{h}</th>
             ))}
           </tr></thead>
-          <tbody>
-            {areas.map((a,i)=>{
-              const pc=a.pct>=80?"#22c55e":a.pct>=50?"#f59e0b":"#ef4444";
-              const nm=a.nome.replace("DIRETORIA DE ","").replace("DIRETORIA ","").replace("GERENTE EXECUTIVA ","GE ");
-              return(
-                <tr key={i} style={{borderBottom:`1px solid ${t.border}`}}>
-                  <td style={{padding:"7px 10px",color:t.txtSec,fontSize:10,maxWidth:180,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}} title={a.nome}>{nm}</td>
-                  <td style={{padding:"7px 10px",textAlign:"center",color:t.txt,fontWeight:700}}>{a.total}</td>
-                  <td style={{padding:"7px 10px",textAlign:"center",color:pc,fontWeight:700}}>{a.pct}%</td>
-                  <td style={{padding:"7px 10px",textAlign:"center",color:"#22c55e"}}>{a.verde}</td>
-                  <td style={{padding:"7px 10px",textAlign:"center",color:"#f59e0b"}}>{a.amarelo}</td>
-                  <td style={{padding:"7px 10px",textAlign:"center",color:"#ef4444"}}>{a.vermelho}</td>
-                  <td style={{padding:"7px 10px",textAlign:"center",color:"#ef4444",fontWeight:700}}>{a.critico}</td>
-                  <td style={{padding:"7px 10px",textAlign:"center",color:t.txtMuted}}>{a.semReal}</td>
-                </tr>
-              );
-            })}
-          </tbody>
+          <AreaRows rows={rows} t={t} shortName={shortName}/>
         </table>
       </div>
+    </div>
+  );
+}
+
+function AreaTable({areas,t}){
+  if(!areas?.length) return null;
+
+  // Split: top-level directorias vs sub-areas by parent diretoria
+  const topLevel = areas.filter(a=>a.isTopLevel!==false);
+  const operacoes = areas.filter(a=>!a.isTopLevel && a.parentDir?.includes("OPERAÇÕES"));
+  const infra     = areas.filter(a=>!a.isTopLevel && a.parentDir?.includes("INFRAESTRUTURA"));
+
+  // Fallback: if no classification data, show single table
+  const hasClassification = areas.some(a=>a.isTopLevel!==undefined);
+  if(!hasClassification){
+    return <AreaSubTable title="RESULTADO POR DIRETORIA" rows={areas} t={t} accent={t.accent}/>;
+  }
+
+  return(
+    <div>
+      <AreaSubTable title="RESULTADO POR DIRETORIA" rows={topLevel} t={t} accent={t.accent}/>
+      {operacoes.length>0&&<AreaSubTable title="DIRETORIA DE OPERAÇÕES — Detalhamento" rows={operacoes} t={t} accent="#f59e0b" shortName={false}/>}
+      {infra.length>0&&<AreaSubTable title="DIRETORIA DE INFRAESTRUTURA E CONCESSÕES — Detalhamento" rows={infra} t={t} accent="#60a5fa" shortName={false}/>}
     </div>
   );
 }
