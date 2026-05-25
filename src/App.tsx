@@ -332,79 +332,103 @@ function FarolBar({stats,t}){
   );
 }
 
-/* ─── AreaTable ──────────────────────────── */
-function AreaRows({rows,t,shortName=true}){
+/* ─── AreaTable (com abas) ───────────────── */
+const TH = ["Área","Total","% Atual.","🟢","🟡","🔴","🚨","⏳"];
+
+function AreaTableContent({rows,t,shortName}){
   const sorted=[...rows].sort((a,b)=>b.pct-a.pct);
-  return(
-    <tbody>
-      {sorted.map((a,i)=>{
-        const pc=a.pct>=80?"#22c55e":a.pct>=50?"#f59e0b":"#ef4444";
-        const nm=shortName
-          ? a.nome.replace("DIRETORIA DE ","").replace("DIRETORIA ","").replace("GERENTE EXECUTIVA ","GE ")
-          : a.nome;
-        return(
-          <tr key={i} style={{borderBottom:`1px solid ${t.border}`}}>
-            <td style={{padding:"7px 10px",color:t.txtSec,fontSize:10,maxWidth:220,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}} title={a.nome}>{nm}</td>
-            <td style={{padding:"7px 10px",textAlign:"center",color:t.txt,fontWeight:700}}>{a.total}</td>
-            <td style={{padding:"7px 10px",textAlign:"center",color:pc,fontWeight:700}}>{a.pct}%</td>
-            <td style={{padding:"7px 10px",textAlign:"center",color:"#22c55e"}}>{a.verde}</td>
-            <td style={{padding:"7px 10px",textAlign:"center",color:"#f59e0b"}}>{a.amarelo}</td>
-            <td style={{padding:"7px 10px",textAlign:"center",color:"#ef4444"}}>{a.vermelho}</td>
-            <td style={{padding:"7px 10px",textAlign:"center",color:"#ef4444",fontWeight:700}}>{a.critico}</td>
-            <td style={{padding:"7px 10px",textAlign:"center",color:t.txtMuted}}>{a.semReal}</td>
-          </tr>
-        );
-      })}
-    </tbody>
+  if(!sorted.length) return(
+    <div style={{padding:"32px 0",textAlign:"center",fontSize:11,color:t.txtMuted}}>
+      Nenhum dado — faça novo upload para classificar as áreas.
+    </div>
   );
-}
-
-const TABLE_HEADERS = ["Diretoria / Área","Total","% Atual.","🟢","🟡","🔴","🚨","⏳"];
-
-function AreaSubTable({title,rows,t,accent,shortName=true}){
-  if(!rows?.length) return null;
-  const color = accent||t.accent;
   return(
-    <div style={{marginBottom:24}}>
-      <div style={{fontSize:10,color:color,letterSpacing:"0.1em",marginBottom:10,fontWeight:700,
-        display:"flex",alignItems:"center",gap:8}}>
-        <span style={{width:6,height:6,borderRadius:"50%",background:color,display:"inline-block",flexShrink:0}}/>
-        {title}
-        <span style={{fontSize:9,color:t.txtMuted,fontWeight:400}}>({rows.length} registros)</span>
-      </div>
-      <div style={{overflowX:"auto"}}>
-        <table style={{width:"100%",borderCollapse:"collapse",fontSize:11}}>
-          <thead><tr style={{borderBottom:`1px solid ${t.border}`}}>
-            {TABLE_HEADERS.map(h=>(
-              <th key={h} style={{padding:"6px 10px",textAlign:h===TABLE_HEADERS[0]?"left":"center",fontSize:9,color:t.txtMuted,letterSpacing:"0.08em",fontWeight:600,whiteSpace:"nowrap"}}>{h}</th>
+    <div style={{overflowX:"auto"}}>
+      <table style={{width:"100%",borderCollapse:"collapse",fontSize:11}}>
+        <thead>
+          <tr style={{borderBottom:`1px solid ${t.border}`}}>
+            {TH.map(h=>(
+              <th key={h} style={{padding:"8px 10px",textAlign:h==="Área"?"left":"center",
+                fontSize:9,color:t.txtMuted,letterSpacing:"0.08em",fontWeight:600,whiteSpace:"nowrap"}}>
+                {h}
+              </th>
             ))}
-          </tr></thead>
-          <AreaRows rows={rows} t={t} shortName={shortName}/>
-        </table>
-      </div>
+          </tr>
+        </thead>
+        <tbody>
+          {sorted.map((a,i)=>{
+            const pc=a.pct>=80?"#22c55e":a.pct>=50?"#f59e0b":"#ef4444";
+            const nm=shortName
+              ? a.nome.replace("DIRETORIA DE ","").replace("DIRETORIA ","").replace("GERENTE EXECUTIVA ","GE ")
+              : a.nome;
+            return(
+              <tr key={i} style={{borderBottom:`1px solid ${t.border}`}}>
+                <td style={{padding:"8px 10px",color:t.txtSec,fontSize:10,maxWidth:240,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}} title={a.nome}>{nm}</td>
+                <td style={{padding:"8px 10px",textAlign:"center",color:t.txt,fontWeight:700}}>{a.total}</td>
+                <td style={{padding:"8px 10px",textAlign:"center",color:pc,fontWeight:700}}>{a.pct}%</td>
+                <td style={{padding:"8px 10px",textAlign:"center",color:"#22c55e"}}>{a.verde}</td>
+                <td style={{padding:"8px 10px",textAlign:"center",color:"#f59e0b"}}>{a.amarelo}</td>
+                <td style={{padding:"8px 10px",textAlign:"center",color:"#ef4444"}}>{a.vermelho}</td>
+                <td style={{padding:"8px 10px",textAlign:"center",color:"#ef4444",fontWeight:700}}>{a.critico}</td>
+                <td style={{padding:"8px 10px",textAlign:"center",color:t.txtMuted}}>{a.semReal}</td>
+              </tr>
+            );
+          })}
+        </tbody>
+      </table>
     </div>
   );
 }
 
 function AreaTable({areas,t}){
+  const [abaAtiva, setAbaAtiva] = useState(0);
   if(!areas?.length) return null;
 
-  // Split: top-level directorias vs sub-areas by parent diretoria
-  const topLevel = areas.filter(a=>a.isTopLevel!==false);
+  const hasClass  = areas.some(a=>a.isTopLevel!==undefined);
+  const topLevel  = hasClass ? areas.filter(a=>a.isTopLevel!==false) : areas;
   const operacoes = areas.filter(a=>!a.isTopLevel && a.parentDir?.includes("OPERAÇÕES"));
   const infra     = areas.filter(a=>!a.isTopLevel && a.parentDir?.includes("INFRAESTRUTURA"));
 
-  // Fallback: if no classification data, show single table
-  const hasClassification = areas.some(a=>a.isTopLevel!==undefined);
-  if(!hasClassification){
-    return <AreaSubTable title="RESULTADO POR DIRETORIA" rows={areas} t={t} accent={t.accent}/>;
-  }
+  const abas = [
+    {label:"Por Diretoria",     count:topLevel.length,  color:t.accent,  rows:topLevel,  shortName:true},
+    {label:"D. Operações",      count:operacoes.length, color:"#f59e0b", rows:operacoes, shortName:false},
+    {label:"D. Infraestrutura", count:infra.length,     color:"#60a5fa", rows:infra,     shortName:false},
+  ].filter(a=>a.count>0);
+
+  const idx = Math.min(abaAtiva, abas.length-1);
+  const aba = abas[idx];
+  if(!aba) return null;
 
   return(
-    <div>
-      <AreaSubTable title="RESULTADO POR DIRETORIA" rows={topLevel} t={t} accent={t.accent}/>
-      {operacoes.length>0&&<AreaSubTable title="DIRETORIA DE OPERAÇÕES — Detalhamento" rows={operacoes} t={t} accent="#f59e0b" shortName={false}/>}
-      {infra.length>0&&<AreaSubTable title="DIRETORIA DE INFRAESTRUTURA E CONCESSÕES — Detalhamento" rows={infra} t={t} accent="#60a5fa" shortName={false}/>}
+    <div style={{marginTop:8}}>
+      {/* Abas */}
+      <div style={{display:"flex",borderBottom:`1px solid ${t.border}`,marginBottom:0}}>
+        {abas.map((a,i)=>{
+          const active=i===idx;
+          return(
+            <button key={i} onClick={()=>setAbaAtiva(i)} style={{
+              background:"none",border:"none",cursor:"pointer",
+              borderBottom:active?`2px solid ${a.color}`:"2px solid transparent",
+              padding:"10px 18px",fontSize:11,marginBottom:-1,
+              fontFamily:"'IBM Plex Mono',monospace",letterSpacing:"0.04em",
+              color:active?a.color:t.txtMuted,fontWeight:active?700:400,
+              transition:"all 0.15s",whiteSpace:"nowrap",
+            }}>
+              {a.label}
+              <span style={{marginLeft:6,fontSize:9,
+                background:active?`${a.color}22`:"transparent",
+                color:active?a.color:t.txtMuted,
+                borderRadius:4,padding:"1px 6px"}}>
+                {a.count}
+              </span>
+            </button>
+          );
+        })}
+      </div>
+      {/* Conteúdo da aba ativa */}
+      <div style={{paddingTop:14}}>
+        <AreaTableContent rows={aba.rows} t={t} shortName={aba.shortName}/>
+      </div>
     </div>
   );
 }
