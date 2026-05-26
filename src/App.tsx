@@ -979,7 +979,7 @@ function GPDArchiveInner(){
   const hasNote = date => !!ls.get(getNoteKey(date));
 
   const noteGpd   = activeNote ? gpds.find(g=>g.calendarDate===activeNote) : null;
-  const noteText  = activeNote ? (notesCache[activeNote]??ls.get(getNoteKey(activeNote))||"") : "";
+ const noteText  = activeNote ? (notesCache[activeNote] ?? (ls.get(getNoteKey(activeNote))||"")) : "";
 
   const NotesPanel = activeNote ? (
     <div style={{position:"fixed",inset:0,zIndex:1001,display:"flex",alignItems:"flex-start",justifyContent:"flex-end",padding:"60px 24px 0 0",pointerEvents:"none"}}>
