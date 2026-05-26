@@ -968,10 +968,7 @@ function GPDArchiveInner(){
         <textarea
           value={notesText}
           onChange={e=>setNotesText(e.target.value)}
-          placeholder={"Ex:
-26/05 — Meta de operações ajustada por impacto de chuvas em Serra do Tigre.
-
-21/05 — Pendências na área de Noronha aguardando consolidação."}
+          placeholder={"Ex:\n26/05 — Meta de operações ajustada.\n\n21/05 — Pendências na área de Noronha aguardando consolidação."}
           style={{flex:1,margin:"12px 20px",background:t.bg,color:t.txt,
             border:`1px solid ${t.borderAcc}`,borderRadius:10,
             padding:"12px 14px",fontSize:11,fontFamily:"'IBM Plex Mono',monospace",
@@ -1101,6 +1098,7 @@ function GPDArchiveInner(){
         {/* HEADER */}
         <header style={{height:52,flexShrink:0,borderBottom:`1px solid ${t.border}`,display:"flex",alignItems:"center",padding:"0 20px",gap:14,background:t.bgHdr}}>
           <span style={{fontFamily:"'Bebas Neue',sans-serif",fontSize:22,letterSpacing:"0.16em",color:t.accent,whiteSpace:"nowrap"}}>GPD ARCHIVE</span>
+          <span style={{fontSize:8,color:t.txtMuted,letterSpacing:"0.06em",opacity:0.5}}>v2.5</span>
           <span style={{fontSize:9,color:t.txtMuted,letterSpacing:"0.1em",whiteSpace:"nowrap",display:"none"}}>GESTÃO DE PERFORMANCE DURADOURA</span>
           <div style={{display:"flex",alignItems:"center",gap:5,padding:"3px 10px",background:"rgba(34,197,94,0.08)",borderRadius:20,border:"1px solid rgba(34,197,94,0.2)"}}>
             <span style={{width:6,height:6,borderRadius:"50%",background:"#22c55e",display:"inline-block",animation:"pulse 2s infinite"}}/>
