@@ -14,7 +14,7 @@ function useXLSX() {
 }
 
 /* ─── Google Drive upload ───────────────── */
-const DRIVE_FOLDER       = "1xbxhkgi_8AhcelI2cGJVnJOWDTAR9fkw";
+const DRIVE_FOLDER       = "1QxqiYTz0T3Ynky5ff48HTtKPV5hoWyMh";
 const DEFAULT_FIREBASE   = "https://gpd-archive-default-rtdb.firebaseio.com";
 const DEFAULT_CLIENT_ID  = "926347832107-9u08816ppn9sgkmueae0i7mgbcbuuv5i.apps.googleusercontent.com";
 // drive scope completo — garante acesso à pasta compartilhada
@@ -808,7 +808,11 @@ function GPDArchiveInner(){
   const [selected, setSelected] = useState(null);
   const [dragging,    setDragging]    = useState(false);
   const [showConfig,  setShowConfig]  = useState(false);
-  const [metasFilter, setMetasFilter] = useState(null); // filterKey | null
+  const [metasFilter, setMetasFilter] = useState(null);
+  const [sidebarOpen, setSidebarOpen] = useState(true);
+  const [showNotes,   setShowNotes]   = useState(false);
+  const [notesText,   setNotesText]   = useState(()=>ls.get("gpd-notes")||"");
+  const [notesSaved,  setNotesSaved]  = useState(false);
   const [syncStatus,setSyncStatus]=useState("idle"); // idle | syncing | ok | err
   const [syncMsg,  setSyncMsg]  = useState("");
   const [uploading,  setUploading]   = useState(false);
@@ -937,6 +941,56 @@ function GPDArchiveInner(){
 
   const Btn=(bg,color)=>({background:bg,color,border:`1px solid ${color}44`,borderRadius:7,padding:"5px 14px",fontSize:11,cursor:"pointer",fontFamily:"'IBM Plex Mono',monospace",letterSpacing:"0.05em",transition:"opacity 0.15s"});
 
+  // ── Painel de Notas ──────────────────────
+  const saveNote = text => {
+    ls.set("gpd-notes", text);
+    setNotesText(text);
+    setNotesSaved(true);
+    setTimeout(()=>setNotesSaved(false), 2500);
+  };
+
+  const NotesPanel = showNotes ? (
+    <div style={{position:"fixed",inset:0,zIndex:1001,display:"flex",alignItems:"flex-start",justifyContent:"flex-end",padding:"60px 90px 0 0",pointerEvents:"none"}}>
+      <div style={{pointerEvents:"all",width:400,background:t.bgHdr,border:`1px solid ${t.accent}44`,borderRadius:14,
+        boxShadow:"0 8px 40px rgba(0,0,0,0.5)",display:"flex",flexDirection:"column",maxHeight:"calc(100vh - 80px)"}}>
+        <div style={{padding:"16px 20px",borderBottom:`1px solid ${t.border}`,display:"flex",alignItems:"center",gap:10,flexShrink:0}}>
+          <span style={{fontSize:16}}>📝</span>
+          <span style={{fontFamily:"'Bebas Neue',sans-serif",fontSize:18,letterSpacing:"0.1em",color:t.txt}}>NOTAS E OBSERVAÇÕES</span>
+          <div style={{flex:1}}/>
+          {notesSaved&&<span style={{fontSize:10,color:"#22c55e",letterSpacing:"0.04em"}}>✓ Salvo</span>}
+          <button onClick={()=>setShowNotes(false)}
+            style={{background:"none",border:"none",color:t.txtMuted,fontSize:20,cursor:"pointer",lineHeight:1,padding:"0 2px"}}>✕</button>
+        </div>
+        <div style={{padding:"10px 20px 0",fontSize:10,color:t.txtMuted,lineHeight:1.6}}>
+          Registre mudanças, decisões e observações. Salvas localmente neste navegador.
+        </div>
+        <textarea
+          value={notesText}
+          onChange={e=>setNotesText(e.target.value)}
+          placeholder={"Ex:
+26/05 — Meta de operações ajustada por impacto de chuvas em Serra do Tigre.
+
+21/05 — Pendências na área de Noronha aguardando consolidação."}
+          style={{flex:1,margin:"12px 20px",background:t.bg,color:t.txt,
+            border:`1px solid ${t.borderAcc}`,borderRadius:10,
+            padding:"12px 14px",fontSize:11,fontFamily:"'IBM Plex Mono',monospace",
+            outline:"none",resize:"none",lineHeight:1.7,minHeight:300}}
+        />
+        <div style={{padding:"0 20px 16px",display:"flex",gap:8,flexShrink:0}}>
+          <button className="ba" onClick={()=>saveNote(notesText)}
+            style={{...Btn(t.greenBg,t.green),flex:1,textAlign:"center",padding:"9px 0",fontSize:11,fontWeight:700}}>
+            💾 Salvar notas
+          </button>
+          <button className="ba" onClick={()=>{
+            if(window.confirm("Limpar todas as notas?")){ saveNote(""); }
+          }} style={{...Btn("rgba(239,68,68,0.08)","#f87171"),padding:"9px 14px",fontSize:11}}>
+            Limpar
+          </button>
+        </div>
+      </div>
+    </div>
+  ) : null;
+
   // Config panel overlay
   const ConfigPanel = showConfig ? (
     <div style={{position:"fixed",inset:0,zIndex:1000,display:"flex",alignItems:"flex-start",justifyContent:"flex-end",padding:"60px 20px 0"}}>
@@ -1060,67 +1114,105 @@ function GPDArchiveInner(){
               {driveStatus==="auth"?"⟳ Autenticando Google...":driveStatus==="uploading"?"⟳ Salvando no Drive...":driveStatus==="ok"?"✓ Salvo no Drive":driveStatus?.startsWith("err:")?`✗ ${driveStatus.slice(4)}`:"✗ Erro no Drive"}
             </span>
           )}
+          <button className="ba" onClick={()=>setShowNotes(n=>!n)}
+            style={{...Btn(showNotes?`${t.accent}18`:t.bgStat, showNotes?t.accent:t.txtSec),fontSize:10,position:"relative"}}>
+            📝 Notas
+            {ls.get("gpd-notes")&&<span style={{position:"absolute",top:3,right:3,width:5,height:5,borderRadius:"50%",background:"#f59e0b"}}/>}
+          </button>
           <button className="ba" onClick={()=>setShowConfig(c=>!c)} style={{...Btn(t.bgStat,t.txtSec),fontSize:10}}>⚙ Config</button>
         </header>
 
         <div style={{display:"flex",flex:1,overflow:"hidden",minHeight:0}}>
 
           {/* SIDEBAR */}
-          <aside style={{width:252,flexShrink:0,borderRight:`1px solid ${t.border}`,display:"flex",flexDirection:"column",background:t.bgSide}}>
+          <aside style={{
+            width:sidebarOpen?252:44,flexShrink:0,
+            borderRight:`1px solid ${t.border}`,
+            display:"flex",flexDirection:"column",
+            background:t.bgSide,
+            transition:"width 0.25s ease",
+            overflow:"hidden",
+          }}>
 
-            {/* Theme */}
-            <div style={{padding:"12px 14px 0"}}>
-              <button className="ba" onClick={()=>setLight(l=>!l)} style={{width:"100%",background:t.tgBg,color:t.tgTxt,border:`1px solid ${t.border}`,borderRadius:8,padding:"8px 12px",fontSize:11,cursor:"pointer",fontFamily:"'IBM Plex Mono',monospace",letterSpacing:"0.05em",display:"flex",alignItems:"center",justifyContent:"center",gap:8}}>
-                <span style={{display:"inline-block",width:28,height:16,borderRadius:8,flexShrink:0,background:light?t.accent:"rgba(255,255,255,0.12)",position:"relative",transition:"background 0.2s"}}>
-                  <span style={{position:"absolute",top:2,left:light?"calc(100% - 14px)":"2px",width:12,height:12,borderRadius:"50%",background:"#fff",transition:"left 0.2s",boxShadow:"0 1px 3px rgba(0,0,0,0.3)"}}/>
+            {/* Theme toggle — só quando aberto */}
+            {sidebarOpen&&(
+              <div style={{padding:"12px 14px 0"}}>
+                <button className="ba" onClick={()=>setLight(l=>!l)} style={{width:"100%",background:t.tgBg,color:t.tgTxt,border:`1px solid ${t.border}`,borderRadius:8,padding:"8px 12px",fontSize:11,cursor:"pointer",fontFamily:"'IBM Plex Mono',monospace",letterSpacing:"0.05em",display:"flex",alignItems:"center",justifyContent:"center",gap:8}}>
+                  <span style={{display:"inline-block",width:28,height:16,borderRadius:8,flexShrink:0,background:light?t.accent:"rgba(255,255,255,0.12)",position:"relative",transition:"background 0.2s"}}>
+                    <span style={{position:"absolute",top:2,left:light?"calc(100% - 14px)":"2px",width:12,height:12,borderRadius:"50%",background:"#fff",transition:"left 0.2s",boxShadow:"0 1px 3px rgba(0,0,0,0.3)"}}/>
+                  </span>
+                  {light?"🌙 Modo Escuro":"☀️ Modo Claro"}
+                </button>
+              </div>
+            )}
+
+            {/* Upload — só quando aberto */}
+            {sidebarOpen&&(
+              <div onDragOver={e=>{e.preventDefault();e.stopPropagation();setDragging(true);}}
+                onDragLeave={()=>setDragging(false)}
+                onDrop={e=>{e.preventDefault();e.stopPropagation();setDragging(false);const f=e.dataTransfer.files?.[0];if(f?.name.endsWith(".xlsx")) addGPD(f);}}
+                style={{position:"relative",margin:14,border:`1.5px dashed ${dragging?t.accent:t.borderAcc}`,borderRadius:10,padding:"18px 12px",textAlign:"center",background:dragging?t.bgAccLt:t.bg,transition:"all 0.2s",overflow:"hidden"}}>
+                <div style={{fontSize:28,marginBottom:8,pointerEvents:"none"}}>{uploading?"⟳":uploadErr?"⚠️":xlsxReady?"📊":"⟳"}</div>
+                <div style={{fontSize:11,lineHeight:1.8,pointerEvents:"none",color:uploadErr?"#ef4444":t.txtSec}}>
+                  {uploading?<span style={{color:t.accent}}>Processando...</span>
+                    :uploadErr?<>{uploadErr}<br/><span style={{fontSize:10,color:t.txtMuted}}>Tente novamente</span></>
+                    :xlsxReady?<>Arraste o GPD aqui ou<br/><span style={{color:t.accent,fontWeight:700}}>clique para selecionar .xlsx</span></>
+                    :<>Carregando leitor...</>}
+                </div>
+                {xlsxReady&&!uploading&&(
+                  <input type="file" accept=".xlsx"
+                    style={{position:"absolute",inset:0,width:"100%",height:"100%",opacity:0,cursor:"pointer",zIndex:2}}
+                    onChange={e=>{const f=e.target.files?.[0];if(f){addGPD(f);e.target.value="";}}}/>
+                )}
+              </div>
+            )}
+
+            {/* Header do histórico + botão de colapsar */}
+            <div style={{padding:"0 8px 8px 14px",display:"flex",alignItems:"center",justifyContent:"space-between",minWidth:0}}>
+              {sidebarOpen&&(
+                <span style={{fontSize:9,color:t.txtMuted,letterSpacing:"0.1em",fontWeight:600,whiteSpace:"nowrap"}}>
+                  HISTÓRICO — {gpds.length} ARQUIVO{gpds.length!==1?"S":""}
                 </span>
-                {light?"🌙 Modo Escuro":"☀️ Modo Claro"}
+              )}
+              <button className="ba" onClick={()=>setSidebarOpen(o=>!o)}
+                title={sidebarOpen?"Recolher histórico":"Expandir histórico"}
+                style={{
+                  background:"none",border:`1px solid ${t.border}`,
+                  borderRadius:6,width:26,height:26,flexShrink:0,
+                  display:"flex",alignItems:"center",justifyContent:"center",
+                  cursor:"pointer",color:t.txtMuted,fontSize:12,
+                  transition:"all 0.2s",
+                  marginLeft:sidebarOpen?0:"auto",marginRight:sidebarOpen?0:"auto",
+                }}>
+                {sidebarOpen?"◀":"▶"}
               </button>
             </div>
 
-            {/* Upload */}
-            <div onDragOver={e=>{e.preventDefault();e.stopPropagation();setDragging(true);}}
-              onDragLeave={()=>setDragging(false)}
-              onDrop={e=>{e.preventDefault();e.stopPropagation();setDragging(false);const f=e.dataTransfer.files?.[0];if(f?.name.endsWith(".xlsx")) addGPD(f);}}
-              style={{position:"relative",margin:14,border:`1.5px dashed ${dragging?t.accent:t.borderAcc}`,borderRadius:10,padding:"18px 12px",textAlign:"center",background:dragging?t.bgAccLt:t.bg,transition:"all 0.2s",overflow:"hidden"}}>
-              <div style={{fontSize:28,marginBottom:8,pointerEvents:"none"}}>{uploading?"⟳":uploadErr?"⚠️":xlsxReady?"📊":"⟳"}</div>
-              <div style={{fontSize:11,lineHeight:1.8,pointerEvents:"none",color:uploadErr?"#ef4444":t.txtSec}}>
-                {uploading?<span style={{color:t.accent}}>Processando...</span>
-                  :uploadErr?<>{uploadErr}<br/><span style={{fontSize:10,color:t.txtMuted}}>Tente novamente</span></>
-                  :xlsxReady?<>Arraste o GPD aqui ou<br/><span style={{color:t.accent,fontWeight:700}}>clique para selecionar .xlsx</span></>
-                  :<>Carregando leitor...</>}
+            {/* Lista de GPDs — só quando aberto */}
+            {sidebarOpen&&(
+              <div style={{flex:1,overflowY:"auto",padding:"0 14px 14px"}}>
+                {gpds.length===0&&<div style={{textAlign:"center",padding:"32px 0",fontSize:11,color:t.txtMuted,lineHeight:1.9}}>Nenhum GPD carregado.<br/>Faça upload do seu<br/>primeiro arquivo.</div>}
+                {sorted.map(g=>{
+                  const hc=healthColor(g.stats),isAct=selected===g.calendarDate;
+                  return(
+                    <div key={g.id} className="gi"
+                      onClick={()=>{setSelected(g.calendarDate);setNavDate(new Date(g.calendarDate+"T12:00:00"));}}
+                      style={{padding:"10px 12px",borderRadius:8,marginBottom:6,cursor:"pointer",border:`1px solid ${isAct?t.accent+"88":t.border}`,background:isAct?t.bgAccLt:t.bgCard,transition:"all 0.15s"}}>
+                      <div style={{display:"flex",justifyContent:"space-between",marginBottom:4}}>
+                        <span style={{fontWeight:700,fontSize:13,color:t.txt}}>{g.referencia||g.filename?.slice(0,12)}</span>
+                        {hc&&<span style={{width:8,height:8,borderRadius:"50%",background:hc,display:"inline-block",marginTop:3,flexShrink:0}}/>}
+                      </div>
+                      <div style={{fontSize:10,color:t.txtSec,marginBottom:5}}>{g.geradoEm||g.calendarDate}</div>
+                      <div style={{fontSize:10,display:"flex",gap:10}}>
+                        <span style={{color:"#ef4444"}}>🔴{g.stats?.emVermelho||0}</span>
+                        <span style={{color:"#f59e0b"}}>🟡{g.stats?.emAmarelo||0}</span>
+                        <span style={{color:"#22c55e"}}>🟢{g.stats?.emVerde||0}</span>
+                      </div>
+                    </div>
+                  );
+                })}
               </div>
-              {xlsxReady&&!uploading&&(
-                <input type="file" accept=".xlsx"
-                  style={{position:"absolute",inset:0,width:"100%",height:"100%",opacity:0,cursor:"pointer",zIndex:2}}
-                  onChange={e=>{const f=e.target.files?.[0];if(f){addGPD(f);e.target.value="";}}}/>
-              )}
-            </div>
-
-            {/* List */}
-            <div style={{padding:"0 14px 8px",fontSize:9,color:t.txtMuted,letterSpacing:"0.1em",fontWeight:600}}>HISTÓRICO — {gpds.length} ARQUIVO{gpds.length!==1?"S":""}</div>
-            <div style={{flex:1,overflowY:"auto",padding:"0 14px 14px"}}>
-              {gpds.length===0&&<div style={{textAlign:"center",padding:"32px 0",fontSize:11,color:t.txtMuted,lineHeight:1.9}}>Nenhum GPD carregado.<br/>Faça upload do seu<br/>primeiro arquivo.</div>}
-              {sorted.map(g=>{
-                const hc=healthColor(g.stats),isAct=selected===g.calendarDate;
-                return(
-                  <div key={g.id} className="gi"
-                    onClick={()=>{setSelected(g.calendarDate);setNavDate(new Date(g.calendarDate+"T12:00:00"));}}
-                    style={{padding:"10px 12px",borderRadius:8,marginBottom:6,cursor:"pointer",border:`1px solid ${isAct?t.accent+"88":t.border}`,background:isAct?t.bgAccLt:t.bgCard,transition:"all 0.15s"}}>
-                    <div style={{display:"flex",justifyContent:"space-between",marginBottom:4}}>
-                      <span style={{fontWeight:700,fontSize:13,color:t.txt}}>{g.referencia||g.filename?.slice(0,12)}</span>
-                      {hc&&<span style={{width:8,height:8,borderRadius:"50%",background:hc,display:"inline-block",marginTop:3,flexShrink:0}}/>}
-                    </div>
-                    <div style={{fontSize:10,color:t.txtSec,marginBottom:5}}>{g.geradoEm||g.calendarDate}</div>
-                    <div style={{fontSize:10,display:"flex",gap:10}}>
-                      <span style={{color:"#ef4444"}}>🔴{g.stats?.emVermelho||0}</span>
-                      <span style={{color:"#f59e0b"}}>🟡{g.stats?.emAmarelo||0}</span>
-                      <span style={{color:"#22c55e"}}>🟢{g.stats?.emVerde||0}</span>
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
+            )}
           </aside>
 
           {/* MAIN */}
@@ -1153,6 +1245,7 @@ function GPDArchiveInner(){
           </main>
         </div>
       </div>
+      {NotesPanel}
       {ConfigPanel}
     </>
   );
