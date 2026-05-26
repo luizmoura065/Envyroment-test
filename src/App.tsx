@@ -601,7 +601,7 @@ function MetasModal({gpd, filterKey, onClose, t}) {
 }
 
 /* ─── DetailPanel ────────────────────────── */
-function DetailPanel({gpd,onClose,onRemove,t,onStatClick}){
+function DetailPanel({gpd,onClose,onRemove,t,onStatClick,onOpenNote,hasNote}){
   if(!gpd) return null;
   return(
     <div style={{background:t.bgAccLt,border:`1px solid ${t.borderAcc}`,borderRadius:14,padding:26,marginTop:24}}>
@@ -610,7 +610,21 @@ function DetailPanel({gpd,onClose,onRemove,t,onStatClick}){
           <div style={{fontFamily:"'Bebas Neue',sans-serif",fontSize:24,letterSpacing:"0.1em",color:t.txt}}>GPD — {gpd.referencia}</div>
           <div style={{fontSize:10,color:t.txtSec,marginTop:5}}>Gerado em {gpd.geradoEm} · {gpd.filename}</div>
         </div>
-        <button onClick={onClose} style={{background:"none",border:"none",color:t.txtMuted,fontSize:22,cursor:"pointer",padding:"0 4px",lineHeight:1}}>✕</button>
+        <div style={{display:"flex",gap:6,alignItems:"center"}}>
+          <button onClick={onOpenNote}
+            title="Notas deste dia"
+            style={{
+              background:hasNote?"rgba(245,158,11,0.12)":"rgba(255,255,255,0.04)",
+              border:`1px solid ${hasNote?"#f59e0b44":"rgba(255,255,255,0.08)"}`,
+              borderRadius:8,padding:"5px 12px",cursor:"pointer",
+              fontSize:11,color:hasNote?"#f59e0b":t.txtMuted,
+              fontFamily:"'IBM Plex Mono',monospace",display:"flex",alignItems:"center",gap:5,
+              transition:"all 0.15s",
+            }}>
+            📝 {hasNote?"Ver notas":"Adicionar nota"}
+          </button>
+          <button onClick={onClose} style={{background:"none",border:"none",color:t.txtMuted,fontSize:22,cursor:"pointer",padding:"0 4px",lineHeight:1}}>✕</button>
+        </div>
       </div>
       <div style={{display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:10,marginBottom:22}}>
         <StatCard t={t} label="TOTAL METAS"   value={gpd.stats?.totalMetas}    color={t.txt}    onClick={gpd.metas?.length?()=>onStatClick("total"):null}/>
@@ -811,8 +825,8 @@ function GPDArchiveInner(){
   const [showConfig,  setShowConfig]  = useState(false);
   const [metasFilter, setMetasFilter] = useState(null);
   const [sidebarOpen, setSidebarOpen] = useState(true);
-  const [showNotes,   setShowNotes]   = useState(false);
-  const [notesText,   setNotesText]   = useState(()=>ls.get("gpd-notes")||"");
+  const [activeNote,  setActiveNote]  = useState(null); // calendarDate | null
+  const [notesCache,  setNotesCache]  = useState({});   // {date: text}
   const [notesSaved,  setNotesSaved]  = useState(false);
   const [syncStatus,setSyncStatus]=useState("idle"); // idle | syncing | ok | err
   const [syncMsg,  setSyncMsg]  = useState("");
@@ -942,45 +956,69 @@ function GPDArchiveInner(){
 
   const Btn=(bg,color)=>({background:bg,color,border:`1px solid ${color}44`,borderRadius:7,padding:"5px 14px",fontSize:11,cursor:"pointer",fontFamily:"'IBM Plex Mono',monospace",letterSpacing:"0.05em",transition:"opacity 0.15s"});
 
-  // ── Painel de Notas ──────────────────────
-  const saveNote = text => {
-    ls.set("gpd-notes", text);
-    setNotesText(text);
+  // ── Notas por dia ────────────────────────
+  const getNoteKey = date => `gpd-note-${date}`;
+
+  const openNote = date => {
+    // Carrega do localStorage se ainda não estiver no cache
+    if(!notesCache[date]) {
+      const saved = ls.get(getNoteKey(date)) || "";
+      setNotesCache(c=>({...c, [date]:saved}));
+    }
+    setActiveNote(date);
+    setNotesSaved(false);
+  };
+
+  const saveNote = (date, text) => {
+    ls.set(getNoteKey(date), text);
+    setNotesCache(c=>({...c, [date]:text}));
     setNotesSaved(true);
     setTimeout(()=>setNotesSaved(false), 2500);
   };
 
-  const NotesPanel = showNotes ? (
-    <div style={{position:"fixed",inset:0,zIndex:1001,display:"flex",alignItems:"flex-start",justifyContent:"flex-end",padding:"60px 90px 0 0",pointerEvents:"none"}}>
-      <div style={{pointerEvents:"all",width:400,background:t.bgHdr,border:`1px solid ${t.accent}44`,borderRadius:14,
+  const hasNote = date => !!ls.get(getNoteKey(date));
+
+  const noteGpd   = activeNote ? gpds.find(g=>g.calendarDate===activeNote) : null;
+  const noteText  = activeNote ? (notesCache[activeNote]??ls.get(getNoteKey(activeNote))||"") : "";
+
+  const NotesPanel = activeNote ? (
+    <div style={{position:"fixed",inset:0,zIndex:1001,display:"flex",alignItems:"flex-start",justifyContent:"flex-end",padding:"60px 24px 0 0",pointerEvents:"none"}}>
+      <div style={{pointerEvents:"all",width:420,background:t.bgHdr,border:`1px solid ${t.accent}44`,borderRadius:14,
         boxShadow:"0 8px 40px rgba(0,0,0,0.5)",display:"flex",flexDirection:"column",maxHeight:"calc(100vh - 80px)"}}>
+        {/* Header */}
         <div style={{padding:"16px 20px",borderBottom:`1px solid ${t.border}`,display:"flex",alignItems:"center",gap:10,flexShrink:0}}>
           <span style={{fontSize:16}}>📝</span>
-          <span style={{fontFamily:"'Bebas Neue',sans-serif",fontSize:18,letterSpacing:"0.1em",color:t.txt}}>NOTAS E OBSERVAÇÕES</span>
+          <div>
+            <div style={{fontFamily:"'Bebas Neue',sans-serif",fontSize:17,letterSpacing:"0.1em",color:t.txt}}>NOTAS DO DIA</div>
+            <div style={{fontSize:10,color:t.txtMuted,marginTop:1}}>
+              {activeNote} {noteGpd?`— GPD ${noteGpd.referencia}`:""}
+            </div>
+          </div>
           <div style={{flex:1}}/>
-          {notesSaved&&<span style={{fontSize:10,color:"#22c55e",letterSpacing:"0.04em"}}>✓ Salvo</span>}
-          <button onClick={()=>setShowNotes(false)}
-            style={{background:"none",border:"none",color:t.txtMuted,fontSize:20,cursor:"pointer",lineHeight:1,padding:"0 2px"}}>✕</button>
+          {notesSaved&&<span style={{fontSize:10,color:"#22c55e",letterSpacing:"0.04em",fontWeight:700}}>✓ Salvo</span>}
+          <button onClick={()=>setActiveNote(null)}
+            style={{background:"none",border:"none",color:t.txtMuted,fontSize:20,cursor:"pointer",lineHeight:1,padding:"0 4px"}}>✕</button>
         </div>
-        <div style={{padding:"10px 20px 0",fontSize:10,color:t.txtMuted,lineHeight:1.6}}>
-          Registre mudanças, decisões e observações. Salvas localmente neste navegador.
-        </div>
+        {/* Textarea */}
         <textarea
-          value={notesText}
-          onChange={e=>setNotesText(e.target.value)}
-          placeholder={"Ex:\n26/05 — Meta de operações ajustada.\n\n21/05 — Pendências na área de Noronha aguardando consolidação."}
-          style={{flex:1,margin:"12px 20px",background:t.bg,color:t.txt,
+          key={activeNote}
+          defaultValue={noteText}
+          onChange={e=>setNotesCache(c=>({...c,[activeNote]:e.target.value}))}
+          placeholder={"Registre observações, mudanças e justificativas para este dia..."}
+          style={{flex:1,margin:"14px 20px 0",background:t.bg,color:t.txt,
             border:`1px solid ${t.borderAcc}`,borderRadius:10,
             padding:"12px 14px",fontSize:11,fontFamily:"'IBM Plex Mono',monospace",
-            outline:"none",resize:"none",lineHeight:1.7,minHeight:300}}
+            outline:"none",resize:"none",lineHeight:1.8,minHeight:260}}
         />
-        <div style={{padding:"0 20px 16px",display:"flex",gap:8,flexShrink:0}}>
-          <button className="ba" onClick={()=>saveNote(notesText)}
+        {/* Footer */}
+        <div style={{padding:"12px 20px 16px",display:"flex",gap:8,flexShrink:0}}>
+          <button className="ba"
+            onClick={()=>saveNote(activeNote, notesCache[activeNote]||"")}
             style={{...Btn(t.greenBg,t.green),flex:1,textAlign:"center",padding:"9px 0",fontSize:11,fontWeight:700}}>
-            💾 Salvar notas
+            💾 Salvar
           </button>
           <button className="ba" onClick={()=>{
-            if(window.confirm("Limpar todas as notas?")){ saveNote(""); }
+            if(window.confirm("Limpar as notas deste dia?")){ saveNote(activeNote,""); }
           }} style={{...Btn("rgba(239,68,68,0.08)","#f87171"),padding:"9px 14px",fontSize:11}}>
             Limpar
           </button>
@@ -1113,11 +1151,6 @@ function GPDArchiveInner(){
               {driveStatus==="auth"?"⟳ Autenticando Google...":driveStatus==="uploading"?"⟳ Salvando no Drive...":driveStatus==="ok"?"✓ Salvo no Drive":driveStatus?.startsWith("err:")?`✗ ${driveStatus.slice(4)}`:"✗ Erro no Drive"}
             </span>
           )}
-          <button className="ba" onClick={()=>setShowNotes(n=>!n)}
-            style={{...Btn(showNotes?`${t.accent}18`:t.bgStat, showNotes?t.accent:t.txtSec),fontSize:10,position:"relative"}}>
-            📝 Notas
-            {ls.get("gpd-notes")&&<span style={{position:"absolute",top:3,right:3,width:5,height:5,borderRadius:"50%",background:"#f59e0b"}}/>}
-          </button>
           <button className="ba" onClick={()=>setShowConfig(c=>!c)} style={{...Btn(t.bgStat,t.txtSec),fontSize:10}}>⚙ Config</button>
         </header>
 
@@ -1239,6 +1272,8 @@ function GPDArchiveInner(){
             {selGpd&&<DetailPanel gpd={selGpd} t={t}
               onClose={()=>setSelected(null)}
               onStatClick={key=>setMetasFilter(key)}
+              onOpenNote={()=>openNote(selGpd.calendarDate)}
+              hasNote={hasNote(selGpd.calendarDate)}
               onRemove={async()=>{const next=gpds.filter(g=>g.id!==selGpd.id);setGpds(next);await saveToFirebase(next);setSelected(null);}}/>}
             {metasFilter&&selGpd&&<MetasModal gpd={selGpd} filterKey={metasFilter} onClose={()=>setMetasFilter(null)} t={t}/>}
           </main>
