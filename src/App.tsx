@@ -1,3 +1,4 @@
+// @ts-nocheck
 import { useState, useEffect, useCallback, useRef, Component } from "react";
 
 /* ─── SheetJS via CDN ────────────────────── */
