@@ -595,7 +595,7 @@ function MetasModal({gpd, filterKey, onClose, t}) {
         {isSemReal && (
           <div style={{padding:"12px 24px",borderBottom:`1px solid ${t.border}`,flexShrink:0,background:t.bg}}>
             <div style={{fontSize:9,color:t.txtMuted,letterSpacing:"0.08em",fontWeight:600,marginBottom:8}}>
-              FILTRAR POR — selecione um ou mais (combináveis)
+              Selecione um ou mais filtros
               {activeKeys.size>0 && (
                 <button onClick={()=>setActiveKeys(new Set())}
                   style={{marginLeft:10,background:"none",border:"none",color:t.accent,fontSize:9,cursor:"pointer",fontFamily:"'IBM Plex Mono',monospace",textDecoration:"underline"}}>
