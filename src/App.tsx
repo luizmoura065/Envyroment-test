@@ -520,27 +520,38 @@ const FILTER_CONFIG = {
 const FAROL_COLORS = { "Verde":"#22c55e", "Amarelo":"#f59e0b", "Vermelho":"#ef4444", "Sem dado":"#64748b" };
 
 // Sub-filtros para "Sem Realizado"
+// Sub-filtros multi-selecionáveis para "Sem Realizado"
 const SUB_FILTERS = [
-  { key:"all",               label:"Todos",                  fn: ()=>true },
-  { key:"previsto_ok",       label:"Previsto preenchido",    fn: m => m.previsto && m.previsto!=="—" && m.previsto!=="N/A" && m.previsto.trim()!=="" },
-  { key:"previsto_vazio",    label:"Previsto vazio",         fn: m => !m.previsto || m.previsto==="—" || m.previsto.trim()==="" },
-  { key:"realizado_vazio",   label:"Realizado vazio",        fn: m => !m.realizado || m.realizado==="—" || m.realizado.trim()==="" },
-  { key:"realizado_na",      label:"Realizado N/A",          fn: m => m.realizado?.toString().toUpperCase()==="N/A" || m.realizado?.toString().toUpperCase()==="NA" },
-  { key:"realizado_ok",      label:"Realizado preenchido",   fn: m => m.realizado && m.realizado!=="—" && m.realizado?.toString().toUpperCase()!=="N/A" && m.realizado.trim()!=="" },
+  { key:"previsto_ok",     label:"Previsto preenchido",  color:"#60a5fa", fn: m => m.previsto && m.previsto!=="—" && m.previsto.trim()!=="" },
+  { key:"previsto_vazio",  label:"Previsto vazio",       color:"#94a3b8", fn: m => !m.previsto || m.previsto==="—" || m.previsto.trim()==="" },
+  { key:"realizado_vazio", label:"Realizado vazio",      color:"#f87171", fn: m => !m.realizado || m.realizado==="—" || m.realizado.trim()==="" },
+  { key:"realizado_sa",    label:"Realizado S/A",        color:"#f59e0b", fn: m => m.realizado?.toString().toUpperCase()==="S/A" || m.realizado?.toString().toUpperCase()==="SA" },
+  { key:"realizado_ok",    label:"Realizado preenchido", color:"#22c55e", fn: m => {const v=m.realizado?.toString().toUpperCase(); return m.realizado && m.realizado!=="—" && v!=="S/A" && v!=="SA" && m.realizado.trim()!=="";} },
 ];
 
 function MetasModal({gpd, filterKey, onClose, t}) {
-  const [search,    setSearch]    = useState("");
-  const [sortBy,    setSortBy]    = useState("diretoria");
-  const [subFilter, setSubFilter] = useState("all");
+  const [search,     setSearch]     = useState("");
+  const [sortBy,     setSortBy]     = useState("diretoria");
+  const [activeKeys, setActiveKeys] = useState(new Set()); // multi-select
   if (!gpd || !filterKey) return null;
 
-  const cfg      = FILTER_CONFIG[filterKey];
-  const isSemReal= filterKey === "semRealizado";
-  const metas    = (gpd.metas || []).filter(cfg.fn);
-  const subFn    = isSemReal ? (SUB_FILTERS.find(f=>f.key===subFilter)?.fn || (()=>true)) : ()=>true;
-  const q        = search.toLowerCase();
-  const shown    = metas
+  const cfg       = FILTER_CONFIG[filterKey];
+  const isSemReal = filterKey === "semRealizado";
+  const metas     = (gpd.metas || []).filter(cfg.fn);
+
+  const toggleKey = key => setActiveKeys(prev => {
+    const next = new Set(prev);
+    next.has(key) ? next.delete(key) : next.add(key);
+    return next;
+  });
+
+  // Se nenhum filtro ativo → mostra todos; senão mostra a UNIÃO dos filtros ativos
+  const subFn = (isSemReal && activeKeys.size > 0)
+    ? m => SUB_FILTERS.filter(f => activeKeys.has(f.key)).some(f => f.fn(m))
+    : () => true;
+
+  const q     = search.toLowerCase();
+  const shown = metas
     .filter(subFn)
     .filter(m => !q || m.objetivo.toLowerCase().includes(q) || m.diretoria.toLowerCase().includes(q) || m.responsavel.toLowerCase().includes(q) || m.codigo.toLowerCase().includes(q))
     .sort((a,b) => {
@@ -553,6 +564,8 @@ function MetasModal({gpd, filterKey, onClose, t}) {
       return 0;
     });
 
+  const isFiltered = (isSemReal && activeKeys.size > 0) || q;
+
   return (
     <div style={{position:"fixed",inset:0,zIndex:2000,display:"flex",alignItems:"center",justifyContent:"center",padding:20,background:"rgba(0,0,0,0.6)"}}>
       <div style={{width:"100%",maxWidth:960,maxHeight:"88vh",display:"flex",flexDirection:"column",background:t.bgHdr,border:`1px solid ${cfg.color}44`,borderRadius:16,overflow:"hidden",boxShadow:"0 20px 60px rgba(0,0,0,0.6)"}}>
@@ -561,14 +574,14 @@ function MetasModal({gpd, filterKey, onClose, t}) {
           <div style={{width:10,height:10,borderRadius:"50%",background:cfg.color,flexShrink:0}}/>
           <div>
             <div style={{fontFamily:"'Bebas Neue',sans-serif",fontSize:20,letterSpacing:"0.1em",color:cfg.color}}>{cfg.label}</div>
-            <div style={{fontSize:10,color:t.txtSec,marginTop:2}}>GPD {gpd.referencia} · {shown.length} de {metas.length} metas{q||subFilter!=="all"?" (filtrado)":""}</div>
+            <div style={{fontSize:10,color:t.txtSec,marginTop:2}}>
+              GPD {gpd.referencia} · {shown.length} de {metas.length} metas{isFiltered?" (filtrado)":""}
+            </div>
           </div>
           <div style={{flex:1}}/>
-          {/* Search */}
           <input value={search} onChange={e=>setSearch(e.target.value)}
             placeholder="Buscar meta, responsável, código..."
             style={{background:t.bg,color:t.txt,border:`1px solid ${t.border}`,borderRadius:8,padding:"7px 12px",fontSize:11,fontFamily:"'IBM Plex Mono',monospace",outline:"none",width:220}}/>
-          {/* Sort */}
           <select value={sortBy} onChange={e=>setSortBy(e.target.value)}
             style={{background:t.bg,color:t.txt,border:`1px solid ${t.border}`,borderRadius:8,padding:"7px 10px",fontSize:11,fontFamily:"'IBM Plex Mono',monospace",outline:"none",cursor:"pointer"}}>
             <option value="diretoria">Ordenar: Diretoria</option>
@@ -578,32 +591,54 @@ function MetasModal({gpd, filterKey, onClose, t}) {
           <button onClick={onClose} style={{background:"none",border:"none",color:t.txtMuted,fontSize:24,cursor:"pointer",lineHeight:1,padding:"0 4px"}}>✕</button>
         </div>
 
-        {/* Sub-filtros — só aparece em Sem Realizado */}
+        {/* Sub-filtros multi-select — exclusivo de Sem Realizado */}
         {isSemReal && (
-          <div style={{padding:"10px 24px",borderBottom:`1px solid ${t.border}`,display:"flex",gap:6,flexWrap:"wrap",flexShrink:0,background:t.bg}}>
-            {SUB_FILTERS.map(sf => {
-              const count = metas.filter(sf.fn).length;
-              const active = subFilter === sf.key;
-              return (
-                <button key={sf.key} onClick={()=>setSubFilter(sf.key)}
-                  style={{
-                    background: active ? cfg.color : "transparent",
-                    color: active ? (cfg.color==="#94a3b8"?"#030712":"#fff") : t.txtSec,
-                    border: `1px solid ${active ? cfg.color : t.border}`,
-                    borderRadius:20, padding:"4px 12px", fontSize:10,
-                    cursor:"pointer", fontFamily:"'IBM Plex Mono',monospace",
-                    letterSpacing:"0.03em", transition:"all 0.15s",
-                    display:"flex", alignItems:"center", gap:5,
-                  }}>
-                  {sf.label}
-                  <span style={{
-                    fontSize:9, fontWeight:700, opacity:0.8,
-                    background: active ? "rgba(0,0,0,0.15)" : t.bgStat,
-                    borderRadius:10, padding:"1px 5px", color: active?"inherit":t.txtMuted,
-                  }}>{count}</span>
+          <div style={{padding:"12px 24px",borderBottom:`1px solid ${t.border}`,flexShrink:0,background:t.bg}}>
+            <div style={{fontSize:9,color:t.txtMuted,letterSpacing:"0.08em",fontWeight:600,marginBottom:8}}>
+              FILTRAR POR — selecione um ou mais (combináveis)
+              {activeKeys.size>0 && (
+                <button onClick={()=>setActiveKeys(new Set())}
+                  style={{marginLeft:10,background:"none",border:"none",color:t.accent,fontSize:9,cursor:"pointer",fontFamily:"'IBM Plex Mono',monospace",textDecoration:"underline"}}>
+                  limpar filtros
                 </button>
-              );
-            })}
+              )}
+            </div>
+            <div style={{display:"flex",gap:8,flexWrap:"wrap"}}>
+              {SUB_FILTERS.map(sf => {
+                const count  = metas.filter(sf.fn).length;
+                const active = activeKeys.has(sf.key);
+                return (
+                  <button key={sf.key} onClick={()=>toggleKey(sf.key)}
+                    style={{
+                      display:"flex",alignItems:"center",gap:6,
+                      background: active ? `${sf.color}22` : t.bgStat,
+                      color: active ? sf.color : t.txtSec,
+                      border: `1.5px solid ${active ? sf.color : t.border}`,
+                      borderRadius:8, padding:"6px 14px",
+                      cursor:"pointer", fontFamily:"'IBM Plex Mono',monospace",
+                      fontSize:10, letterSpacing:"0.03em",
+                      transition:"all 0.15s",
+                      boxShadow: active ? `0 0 0 1px ${sf.color}44` : "none",
+                    }}>
+                    <span style={{
+                      width:8,height:8,borderRadius:2,flexShrink:0,
+                      background: active ? sf.color : t.border,
+                      transition:"background 0.15s",
+                      display:"flex",alignItems:"center",justifyContent:"center",
+                    }}>
+                      {active && <span style={{color:"#fff",fontSize:7,lineHeight:1}}>✓</span>}
+                    </span>
+                    {sf.label}
+                    <span style={{
+                      fontSize:9,fontWeight:700,
+                      background: active ? `${sf.color}33` : t.bg,
+                      color: active ? sf.color : t.txtMuted,
+                      borderRadius:10,padding:"1px 6px",
+                    }}>{count}</span>
+                  </button>
+                );
+              })}
+            </div>
           </div>
         )}
 
