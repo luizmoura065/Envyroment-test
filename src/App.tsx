@@ -106,6 +106,23 @@ async function fbSet(url, data) {
   if (!r.ok) throw new Error(`Firebase PUT ${r.status}`);
   return r.json();
 }
+// Notes stored in Firebase as {date: text}
+async function fbGetNotes(url) {
+  const r = await fetch(`${url}/gpd-notes.json`);
+  if (!r.ok) return {};
+  const d = await r.json();
+  return (d && typeof d === "object" && !Array.isArray(d)) ? d : {};
+}
+async function fbSetNote(url, date, text) {
+  const path = encodeURIComponent(date).replace(/-/g, "%2D");
+  const r = await fetch(`${url}/gpd-notes/${path}.json`, {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(text),
+  });
+  if (!r.ok) throw new Error(`Firebase note PUT ${r.status}`);
+  return r.json();
+}
 
 /* ─── localStorage helper ────────────────── */
 const ls = {
@@ -502,15 +519,29 @@ const FILTER_CONFIG = {
 
 const FAROL_COLORS = { "Verde":"#22c55e", "Amarelo":"#f59e0b", "Vermelho":"#ef4444", "Sem dado":"#64748b" };
 
+// Sub-filtros para "Sem Realizado"
+const SUB_FILTERS = [
+  { key:"all",               label:"Todos",                  fn: ()=>true },
+  { key:"previsto_ok",       label:"Previsto preenchido",    fn: m => m.previsto && m.previsto!=="—" && m.previsto!=="N/A" && m.previsto.trim()!=="" },
+  { key:"previsto_vazio",    label:"Previsto vazio",         fn: m => !m.previsto || m.previsto==="—" || m.previsto.trim()==="" },
+  { key:"realizado_vazio",   label:"Realizado vazio",        fn: m => !m.realizado || m.realizado==="—" || m.realizado.trim()==="" },
+  { key:"realizado_na",      label:"Realizado N/A",          fn: m => m.realizado?.toString().toUpperCase()==="N/A" || m.realizado?.toString().toUpperCase()==="NA" },
+  { key:"realizado_ok",      label:"Realizado preenchido",   fn: m => m.realizado && m.realizado!=="—" && m.realizado?.toString().toUpperCase()!=="N/A" && m.realizado.trim()!=="" },
+];
+
 function MetasModal({gpd, filterKey, onClose, t}) {
-  const [search, setSearch] = useState("");
-  const [sortBy, setSortBy] = useState("diretoria");
+  const [search,    setSearch]    = useState("");
+  const [sortBy,    setSortBy]    = useState("diretoria");
+  const [subFilter, setSubFilter] = useState("all");
   if (!gpd || !filterKey) return null;
 
-  const cfg   = FILTER_CONFIG[filterKey];
-  const metas = (gpd.metas || []).filter(cfg.fn);
-  const q     = search.toLowerCase();
-  const shown = metas
+  const cfg      = FILTER_CONFIG[filterKey];
+  const isSemReal= filterKey === "semRealizado";
+  const metas    = (gpd.metas || []).filter(cfg.fn);
+  const subFn    = isSemReal ? (SUB_FILTERS.find(f=>f.key===subFilter)?.fn || (()=>true)) : ()=>true;
+  const q        = search.toLowerCase();
+  const shown    = metas
+    .filter(subFn)
     .filter(m => !q || m.objetivo.toLowerCase().includes(q) || m.diretoria.toLowerCase().includes(q) || m.responsavel.toLowerCase().includes(q) || m.codigo.toLowerCase().includes(q))
     .sort((a,b) => {
       if(sortBy==="diretoria") return a.diretoria.localeCompare(b.diretoria);
@@ -524,19 +555,19 @@ function MetasModal({gpd, filterKey, onClose, t}) {
 
   return (
     <div style={{position:"fixed",inset:0,zIndex:2000,display:"flex",alignItems:"center",justifyContent:"center",padding:20,background:"rgba(0,0,0,0.6)"}}>
-      <div style={{width:"100%",maxWidth:900,maxHeight:"88vh",display:"flex",flexDirection:"column",background:t.bgHdr,border:`1px solid ${cfg.color}44`,borderRadius:16,overflow:"hidden",boxShadow:"0 20px 60px rgba(0,0,0,0.6)"}}>
+      <div style={{width:"100%",maxWidth:960,maxHeight:"88vh",display:"flex",flexDirection:"column",background:t.bgHdr,border:`1px solid ${cfg.color}44`,borderRadius:16,overflow:"hidden",boxShadow:"0 20px 60px rgba(0,0,0,0.6)"}}>
         {/* Header */}
         <div style={{padding:"18px 24px",borderBottom:`1px solid ${t.border}`,display:"flex",alignItems:"center",gap:14,flexShrink:0}}>
           <div style={{width:10,height:10,borderRadius:"50%",background:cfg.color,flexShrink:0}}/>
           <div>
             <div style={{fontFamily:"'Bebas Neue',sans-serif",fontSize:20,letterSpacing:"0.1em",color:cfg.color}}>{cfg.label}</div>
-            <div style={{fontSize:10,color:t.txtSec,marginTop:2}}>GPD {gpd.referencia} · {shown.length} de {metas.length} metas{q?" (filtrado)":""}</div>
+            <div style={{fontSize:10,color:t.txtSec,marginTop:2}}>GPD {gpd.referencia} · {shown.length} de {metas.length} metas{q||subFilter!=="all"?" (filtrado)":""}</div>
           </div>
           <div style={{flex:1}}/>
           {/* Search */}
           <input value={search} onChange={e=>setSearch(e.target.value)}
             placeholder="Buscar meta, responsável, código..."
-            style={{background:t.bg,color:t.txt,border:`1px solid ${t.border}`,borderRadius:8,padding:"7px 12px",fontSize:11,fontFamily:"'IBM Plex Mono',monospace",outline:"none",width:260}}/>
+            style={{background:t.bg,color:t.txt,border:`1px solid ${t.border}`,borderRadius:8,padding:"7px 12px",fontSize:11,fontFamily:"'IBM Plex Mono',monospace",outline:"none",width:220}}/>
           {/* Sort */}
           <select value={sortBy} onChange={e=>setSortBy(e.target.value)}
             style={{background:t.bg,color:t.txt,border:`1px solid ${t.border}`,borderRadius:8,padding:"7px 10px",fontSize:11,fontFamily:"'IBM Plex Mono',monospace",outline:"none",cursor:"pointer"}}>
@@ -546,6 +577,35 @@ function MetasModal({gpd, filterKey, onClose, t}) {
           </select>
           <button onClick={onClose} style={{background:"none",border:"none",color:t.txtMuted,fontSize:24,cursor:"pointer",lineHeight:1,padding:"0 4px"}}>✕</button>
         </div>
+
+        {/* Sub-filtros — só aparece em Sem Realizado */}
+        {isSemReal && (
+          <div style={{padding:"10px 24px",borderBottom:`1px solid ${t.border}`,display:"flex",gap:6,flexWrap:"wrap",flexShrink:0,background:t.bg}}>
+            {SUB_FILTERS.map(sf => {
+              const count = metas.filter(sf.fn).length;
+              const active = subFilter === sf.key;
+              return (
+                <button key={sf.key} onClick={()=>setSubFilter(sf.key)}
+                  style={{
+                    background: active ? cfg.color : "transparent",
+                    color: active ? (cfg.color==="#94a3b8"?"#030712":"#fff") : t.txtSec,
+                    border: `1px solid ${active ? cfg.color : t.border}`,
+                    borderRadius:20, padding:"4px 12px", fontSize:10,
+                    cursor:"pointer", fontFamily:"'IBM Plex Mono',monospace",
+                    letterSpacing:"0.03em", transition:"all 0.15s",
+                    display:"flex", alignItems:"center", gap:5,
+                  }}>
+                  {sf.label}
+                  <span style={{
+                    fontSize:9, fontWeight:700, opacity:0.8,
+                    background: active ? "rgba(0,0,0,0.15)" : t.bgStat,
+                    borderRadius:10, padding:"1px 5px", color: active?"inherit":t.txtMuted,
+                  }}>{count}</span>
+                </button>
+              );
+            })}
+          </div>
+        )}
 
         {/* Table */}
         <div style={{overflowY:"auto",flex:1}}>
@@ -852,8 +912,9 @@ function GPDArchiveInner(){
   const syncFromFirebase = useCallback(async (url=firebaseUrl) => {
     if(!url) return;
     try {
-      const data = await fbGet(url);
+      const [data, notes] = await Promise.all([fbGet(url), fbGetNotes(url)]);
       setGpds(data);
+      setNotesCache(notes);
     } catch(e){ console.error("sync:",e); }
   },[firebaseUrl]);
 
@@ -956,31 +1017,20 @@ function GPDArchiveInner(){
 
   const Btn=(bg,color)=>({background:bg,color,border:`1px solid ${color}44`,borderRadius:7,padding:"5px 14px",fontSize:11,cursor:"pointer",fontFamily:"'IBM Plex Mono',monospace",letterSpacing:"0.05em",transition:"opacity 0.15s"});
 
-  // ── Notas por dia ────────────────────────
-  const getNoteKey = date => `gpd-note-${date}`;
+  // ── Notas por dia (Firebase — compartilhadas com todos) ──
+  const openNote = date => { setActiveNote(date); setNotesSaved(false); };
 
-  const openNote = date => {
-    // Carrega do localStorage se ainda não estiver no cache
-    if(!notesCache[date]) {
-      const saved = ls.get(getNoteKey(date)) || "";
-      setNotesCache(c=>({...c, [date]:saved}));
-    }
-    setActiveNote(date);
-    setNotesSaved(false);
-  };
-
-  const saveNote = (date, text) => {
-    ls.set(getNoteKey(date), text);
+  const saveNote = async (date, text) => {
     setNotesCache(c=>({...c, [date]:text}));
     setNotesSaved(true);
     setTimeout(()=>setNotesSaved(false), 2500);
+    try { await fbSetNote(firebaseUrl, date, text); } catch(e){ console.error("note:",e); }
   };
 
-  const hasNote = date => !!ls.get(getNoteKey(date));
+  const hasNote = date => !!(notesCache[date]?.trim());
 
-  const noteGpd   = activeNote ? gpds.find(g=>g.calendarDate===activeNote) : null;
- const noteText  = activeNote ? (notesCache[activeNote] ?? (ls.get(getNoteKey(activeNote))||"")) : "";
-
+  const noteGpd  = activeNote ? gpds.find(g=>g.calendarDate===activeNote) : null;
+  const noteText = activeNote ? (notesCache[activeNote]||"") : "";
   const NotesPanel = activeNote ? (
     <div style={{position:"fixed",inset:0,zIndex:1001,display:"flex",alignItems:"flex-start",justifyContent:"flex-end",padding:"60px 24px 0 0",pointerEvents:"none"}}>
       <div style={{pointerEvents:"all",width:420,background:t.bgHdr,border:`1px solid ${t.accent}44`,borderRadius:14,
@@ -1003,7 +1053,7 @@ function GPDArchiveInner(){
         <textarea
           key={activeNote}
           defaultValue={noteText}
-          onChange={e=>setNotesCache(c=>({...c,[activeNote]:e.target.value}))}
+          onChange={e=>{const v=e.target.value;setNotesCache(c=>({...c,[activeNote]:v}));}}
           placeholder={"Registre observações, mudanças e justificativas para este dia..."}
           style={{flex:1,margin:"14px 20px 0",background:t.bg,color:t.txt,
             border:`1px solid ${t.borderAcc}`,borderRadius:10,
@@ -1013,12 +1063,12 @@ function GPDArchiveInner(){
         {/* Footer */}
         <div style={{padding:"12px 20px 16px",display:"flex",gap:8,flexShrink:0}}>
           <button className="ba"
-            onClick={()=>saveNote(activeNote, notesCache[activeNote]||"")}
+            onClick={()=>saveNote(activeNote, notesCache[activeNote]||"").catch(()=>{})}
             style={{...Btn(t.greenBg,t.green),flex:1,textAlign:"center",padding:"9px 0",fontSize:11,fontWeight:700}}>
             💾 Salvar
           </button>
           <button className="ba" onClick={()=>{
-            if(window.confirm("Limpar as notas deste dia?")){ saveNote(activeNote,""); }
+            if(window.confirm("Limpar as notas deste dia?")){ saveNote(activeNote,"").catch(()=>{}); }
           }} style={{...Btn("rgba(239,68,68,0.08)","#f87171"),padding:"9px 14px",fontSize:11}}>
             Limpar
           </button>
